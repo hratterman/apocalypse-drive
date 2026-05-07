@@ -314,7 +314,18 @@
   }
   .drive-tag.portable { color: var(--good); border-color: var(--good); }
   .drive-tag.warn { color: var(--warn); border-color: var(--warn); }
+  .drive-tag.err { color: var(--bad); border-color: var(--bad); }
   .drive-tag.essential { color: var(--accent); border-color: var(--accent); }
+  .drive-help {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-left: 2px solid var(--bad);
+    background: rgba(255, 80, 80, 0.06);
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text);
+  }
+  .drive-help strong { color: var(--bad); }
   .drive-space {
     flex-shrink: 0; text-align: right; font-size: 13px;
   }
@@ -550,19 +561,27 @@ async function loadDrives() {
   list.innerHTML = '';
   for (const d of drives) {
     const card = document.createElement('div');
-    // We previously refused clicks on cards we couldn't verify writable.
-    // That hard-blocked users from picking fresh exFAT USB sticks where
-    // the writability probe is fragile. Now: always clickable, but show a
-    // warning tag when uncertain — backend will surface a real error if
-    // the install actually fails.
-    card.className = 'drive-card';
+    // os_readonly = the OS itself mounted this volume read-only (real failure,
+    // common for SD cards with filesystem errors). Hard-block the click
+    // because writes WILL fail. Other writability uncertainty stays soft.
+    const hardBlock = !!d.os_readonly;
+    card.className = 'drive-card' + (hardBlock ? ' disabled' : '');
     card.dataset.path = d.apocalypse_dir;
     const tags = [];
     if (d.type === 'external') tags.push(`<span class="drive-tag">${d.filesystem}</span>`);
     if (d.portable) tags.push(`<span class="drive-tag portable">cross-OS portable</span>`);
     else if (d.type === 'external' && d.filesystem !== 'unknown') tags.push(`<span class="drive-tag warn">${d.filesystem} (one-OS)</span>`);
     if (d.has_existing) tags.push(`<span class="drive-tag essential">existing install</span>`);
-    if (!d.writable) tags.push(`<span class="drive-tag warn">may be read-only</span>`);
+    if (hardBlock) {
+      tags.push(`<span class="drive-tag err">read-only mount</span>`);
+    } else if (!d.writable) {
+      tags.push(`<span class="drive-tag warn">may be read-only</span>`);
+    }
+
+    let helpRow = '';
+    if (hardBlock) {
+      helpRow = `<div class="drive-help">macOS mounted this volume read-only, usually because of a filesystem error. Open Disk Utility, select this drive, and run <strong>First Aid</strong>. If that fails, back up your data and reformat as ExFAT.</div>`;
+    }
 
     card.innerHTML = `
       <div class="drive-icon">${driveIcon(d)}</div>
@@ -570,13 +589,16 @@ async function loadDrives() {
         <div class="name">${d.label}</div>
         <div class="path">${d.apocalypse_dir}</div>
         <div class="tags">${tags.join('')}</div>
+        ${helpRow}
       </div>
       <div class="drive-space">
         <div class="free">${fmtBytes(d.free)}</div>
         <div class="total">free of ${fmtBytes(d.total)}</div>
       </div>
     `;
-    card.addEventListener('click', () => selectDrive(d.apocalypse_dir, card));
+    if (!hardBlock) {
+      card.addEventListener('click', () => selectDrive(d.apocalypse_dir, card));
+    }
     list.appendChild(card);
   }
 }

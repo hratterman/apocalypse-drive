@@ -136,6 +136,35 @@ def _windows_filesystem(letter: str) -> str:
 PORTABLE_FS = {'exfat', 'fat32', 'vfat', 'msdos', 'fat'}
 
 
+def _is_readonly_mount_macos(path: Path) -> bool:
+    """Returns True if the path is mounted read-only at the OS level on macOS.
+
+    Some external drives (especially SD cards with filesystem errors that
+    macOS refuses to auto-repair) get mounted with the read-only flag,
+    making every write fail no matter where you try. We surface this in
+    the wizard with a stronger error than the generic "may be read-only"
+    warning so the user knows to run First Aid or reformat.
+    """
+    if platform.system() != 'Darwin':
+        return False
+    try:
+        out = subprocess.run(
+            ['mount'], capture_output=True, text=True, timeout=2
+        )
+        for line in out.stdout.splitlines():
+            # Lines look like: /dev/disk5s1 on /Volumes/Untitled (exfat, ..., read-only, ...)
+            # or: /dev/disk5s1 on /Volumes/Untitled (exfat, local, nodev, ...)
+            if f' on {path} ' in line or f' on {path}\n' in line:
+                # Match within the parenthesized options block.
+                opts = line.split('(', 1)[-1].rstrip(')')
+                if 'read-only' in opts.lower() or ' ro,' in opts.lower() or opts.lower().endswith(' ro'):
+                    return True
+                return False
+    except Exception:
+        pass
+    return False
+
+
 def _entry(path: Path, label: str, kind: str) -> dict:
     """Build a single drive entry dict."""
     p = path
@@ -195,6 +224,16 @@ def _entry(path: Path, label: str, kind: str) -> dict:
         'filesystem': fs,
         'portable': fs in PORTABLE_FS,
         'writable': writable,
+        # Distinguish "OS forced this volume read-only" (real, hard error,
+        # First Aid time) from "we couldn't verify writes work" (probe
+        # quirk, the user can probably still try). Only report True for
+        # external mounts under /Volumes — the boot volume's read-only
+        # APFS root is irrelevant since we always install into the home
+        # folder, not /.
+        'os_readonly': (
+            kind == 'external'
+            and _is_readonly_mount_macos(p)
+        ),
         **{k: v for k, v in _disk(p).items() if k != '_timeout'},
         'apocalypse_dir': str(apoc_dir),
         'has_existing': has_existing,
