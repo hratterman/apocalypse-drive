@@ -580,6 +580,29 @@ def downloads_snapshot():
 
 # --- HTML pages -------------------------------------------------------------
 
+def _read_version():
+    """Read version from VERSION file at the repo/bundle root.
+
+    Resolution order:
+      1. <resource_root>/VERSION  (PyInstaller bundle places this at root)
+      2. <bin>/../VERSION         (source tree)
+      3. fallback string          (build glitch)
+    """
+    candidates = [
+        _resource_root() / 'VERSION',
+        Path(__file__).resolve().parent.parent / 'VERSION',
+    ]
+    for p in candidates:
+        try:
+            if p.exists():
+                v = p.read_text(encoding='utf-8').strip()
+                if v:
+                    return v
+        except Exception:
+            continue
+    return 'unknown'
+
+
 def _resource_root():
     """Return the directory that contains bin/templates/, bin/static/, data/.
 
@@ -596,6 +619,9 @@ def _resource_root():
     if meipass:
         return Path(meipass)
     return Path(__file__).resolve().parent.parent
+
+
+_APP_VERSION = _read_version()
 
 
 def _read_template(name):
@@ -748,7 +774,7 @@ def dispatch_get(path, qs):
             'theme': st.get('theme', 'terminal'),
             'model': st.get('model', '3b'),
             'disk': disk_for(_INSTALL_DIR),
-            'version': '1.3.8',
+            'version': _APP_VERSION,
             'author': 'Henry Ratterman',
             'author_url': 'https://henryratterman.com',
         })

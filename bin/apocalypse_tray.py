@@ -417,11 +417,37 @@ class LlamaServerManager:
         self.log_path = self.install_dir / 'logs' / 'llamafile.log'
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
 
+    def _check_relocation(self):
+        """If the wizard wrote a new ~/.apocalypse_install pointer, re-target.
+
+        Called each find_model() so the tray follows the wizard's drive picker
+        without requiring a restart. Without this, the tray keeps looking at
+        the boot-time install_dir even after the wizard relocated to a USB.
+        """
+        pointer = Path.home() / '.apocalypse_install'
+        if not pointer.exists():
+            return
+        try:
+            target = Path(pointer.read_text(encoding='utf-8').strip()).resolve()
+        except Exception:
+            return
+        if target == self.install_dir.resolve():
+            return
+        # Pointer changed since boot, re-target.
+        if not target.exists():
+            return  # drive not mounted; keep current
+        self.install_dir = target
+        self.llm_dir = target / 'llm'
+        # NB: do NOT rewire log_path. Keeps the existing log continuous.
+
     def find_model(self):
         """Pick the best available .llamafile (prefer 8B if RAM >= 12 GB).
 
         Returns Path or None if no model is installed.
         """
+        # Re-check the install pointer on every call. This lets the tray
+        # follow the wizard's drive picker without a restart.
+        self._check_relocation()
         if not self.llm_dir.exists():
             return None
         candidates = sorted(self.llm_dir.glob('*.llamafile')) + \

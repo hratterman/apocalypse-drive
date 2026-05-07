@@ -51,6 +51,7 @@ def _find_libzim():
 
 # Files to embed inside the bundle
 datas = [
+    (str(ROOT / 'VERSION'),                   '.'),
     (str(ROOT / 'bin' / 'kiwix_shim.py'),     'bin'),
     (str(ROOT / 'bin' / 'setup_routes.py'),   'bin'),
     (str(ROOT / 'bin' / 'kiwix_opds.py'),     'bin'),
