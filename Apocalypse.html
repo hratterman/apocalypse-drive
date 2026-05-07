@@ -536,6 +536,64 @@
   .system-info .label { color: var(--text-dim); }
   .system-info .value { color: var(--text); }
 
+  /* Download banner. Sits above the controls when downloads are active.
+     Clickable; deeplinks to the wizard's progress view. */
+  .dl-banner {
+    margin-bottom: 24px;
+    padding: 14px 16px;
+    border: 1px solid var(--accent);
+    border-radius: var(--border-radius);
+    background: var(--panel);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .dl-banner:hover {
+    background: var(--panel-2, var(--panel));
+    border-color: var(--text);
+  }
+  .dl-banner-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--text);
+  }
+  .dl-banner-icon {
+    font-size: 18px;
+    color: var(--accent);
+  }
+  .dl-banner-text {
+    flex: 1;
+    color: var(--text);
+  }
+  .dl-banner-link {
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+  .dl-banner-bar {
+    height: 4px;
+    background: var(--panel-2, rgba(255, 255, 255, 0.06));
+    border-radius: 2px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+  .dl-banner-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.5s ease-out;
+  }
+  .dl-banner.has-error {
+    border-color: var(--bad, #f87171);
+  }
+  .dl-banner.has-error .dl-banner-icon { color: var(--bad, #f87171); }
+  .dl-banner.has-error .dl-banner-fill { background: var(--bad, #f87171); }
+  .dl-banner.is-retrying {
+    border-color: var(--warn, #fbbf24);
+  }
+  .dl-banner.is-retrying .dl-banner-icon { color: var(--warn, #fbbf24); }
+
   .controls {
     display: flex;
     gap: 18px;
@@ -792,6 +850,19 @@
 
   <div class="system-info" id="sysinfo">
     <span class="label">SYS:</span> <span class="value">initializing…</span>
+  </div>
+
+  <!-- Download progress banner. Hidden by default; shown when active or
+       errored downloads are detected. Lets the user see that downloads
+       are alive even after closing the wizard. Click to jump back to
+       the wizard's progress page. -->
+  <div class="dl-banner" id="dlBanner" style="display:none" onclick="window.location='/setup'">
+    <div class="dl-banner-row">
+      <span class="dl-banner-icon" id="dlBannerIcon">↓</span>
+      <span class="dl-banner-text" id="dlBannerText">downloads active</span>
+      <span class="dl-banner-link">[ open progress page ]</span>
+    </div>
+    <div class="dl-banner-bar"><div class="dl-banner-fill" id="dlBannerFill"></div></div>
   </div>
 
   <div class="controls">
@@ -1076,6 +1147,82 @@ async function checkServices() {
   return { kiwixOk, llamaOk };
 }
 
+// Poll active downloads from the shim. Updates the banner above the
+// controls so the user can SEE that downloads are still running even
+// after closing the wizard. Click on the banner deeplinks to the
+// wizard's progress page.
+async function updateDownloadBanner() {
+  const banner = document.getElementById('dlBanner');
+  if (!banner) return;
+  let data;
+  try {
+    const r = await fetch(KIWIX + '/api/download/progress', { signal: AbortSignal.timeout(2500) });
+    if (!r.ok) { banner.style.display = 'none'; return; }
+    data = await r.json();
+  } catch (e) {
+    banner.style.display = 'none';
+    return;
+  }
+  const dls = data.downloads || [];
+  if (dls.length === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+  // Aggregate stats
+  let total = 0, downloaded = 0;
+  let active = 0, retrying = 0, errored = 0, done = 0;
+  for (const d of dls) {
+    total += d.total || 0;
+    downloaded += d.downloaded || 0;
+    if (d.status === 'downloading' || d.status === 'queued') active++;
+    else if (d.status === 'retrying') retrying++;
+    else if (d.status === 'error') errored++;
+    else if (d.status === 'done') done++;
+  }
+  // Hide if everything is terminal AND nothing errored. Successful
+  // completions clean themselves up; we only keep showing if there's
+  // ongoing work or unresolved failures.
+  if (active === 0 && retrying === 0 && errored === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+  banner.style.display = 'block';
+  // Visual state class drives color: red if errors, yellow if any
+  // download is in retry backoff, otherwise normal accent color.
+  banner.classList.remove('has-error', 'is-retrying');
+  if (errored > 0) banner.classList.add('has-error');
+  else if (retrying > 0) banner.classList.add('is-retrying');
+
+  // Text and icon. Shows the most-relevant state first.
+  const icon = document.getElementById('dlBannerIcon');
+  const text = document.getElementById('dlBannerText');
+  const fill = document.getElementById('dlBannerFill');
+  const pct = total > 0 ? Math.min(100, (downloaded / total) * 100) : 0;
+  fill.style.width = pct.toFixed(1) + '%';
+
+  let parts = [];
+  if (active > 0) parts.push(`${active} downloading`);
+  if (retrying > 0) parts.push(`${retrying} retrying`);
+  if (errored > 0) parts.push(`${errored} errored`);
+  if (done > 0) parts.push(`${done} done`);
+  const sizeStr = total > 0
+    ? ` · ${fmtBytes(downloaded)} / ${fmtBytes(total)} · ${pct.toFixed(0)}%`
+    : '';
+  text.textContent = parts.join(' · ') + sizeStr;
+  icon.textContent = retrying > 0 ? '⟳' : (errored > 0 && active === 0 ? '⚠' : '↓');
+}
+
+// Reuse the same byte formatter the wizard uses. Keep it local so
+// Apocalypse.html still works as a static file (no shared JS bundle).
+function fmtBytes(n) {
+  if (!n) return '0 B';
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+  if (n < 1099511627776) return (n / 1073741824).toFixed(1) + ' GB';
+  return (n / 1099511627776).toFixed(2) + ' TB';
+}
+
 function showError(msg) {
   errEl.textContent = msg;
   errEl.style.display = 'block';
@@ -1287,6 +1434,11 @@ askForm.addEventListener('submit', async (e) => {
 
 checkServices();
 setInterval(checkServices, 5000);
+// Banner polls more often than service health (3s) so progress feels
+// live. The endpoint is cheap (no disk I/O, just a snapshot of the
+// in-memory tracker dict) so this is fine.
+updateDownloadBanner();
+setInterval(updateDownloadBanner, 3000);
 </script>
 </body>
 </html>

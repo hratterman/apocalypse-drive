@@ -31,6 +31,7 @@ import os
 import shutil
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -292,75 +293,129 @@ class Download:
     def _run(self):
         self.status = 'downloading'
         self.started_at = time.time()
+        # Retry network failures with exponential backoff. Multi-GB downloads
+        # over hours of wall time WILL hit transient failures (DNS hiccups,
+        # WiFi roams, server-side TCP resets). Without retry the user sees a
+        # 95%-complete download die at the finish line and has to manually
+        # click Retry, which they correctly do not trust.
+        MAX_ATTEMPTS = 8
+        attempt = 0
+        last_error = None
+
         try:
-            # Create parent dir
             self.dest_path.parent.mkdir(parents=True, exist_ok=True)
 
-            # Resume support via Range header
-            existing = 0
-            if self.part_path.exists():
-                existing = self.part_path.stat().st_size
+            while attempt < MAX_ATTEMPTS:
+                if self.cancel_flag.is_set():
+                    self.status = 'cancelled'
+                    return
+
+                # Re-check the partial size on every attempt; the prior
+                # attempt may have downloaded MORE bytes before failing.
+                existing = 0
+                if self.part_path.exists():
+                    existing = self.part_path.stat().st_size
                 self.downloaded = existing
 
-            req = urllib.request.Request(self.url)
-            if existing > 0:
-                req.add_header('Range', f'bytes={existing}-')
+                # Quick exit if a previous attempt completed the file (e.g.
+                # the rename below succeeded but we got here via a bad
+                # exception path). Defensive only.
+                if self.expected_size and existing >= self.expected_size:
+                    break
 
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                # Capture true total from Content-Range or Content-Length
-                cl = resp.headers.get('Content-Length')
-                cr = resp.headers.get('Content-Range')
-                if cr and '/' in cr:
-                    try:
-                        self.expected_size = int(cr.split('/')[-1])
-                    except Exception:
-                        pass
-                elif cl and existing == 0:
-                    try:
-                        self.expected_size = int(cl)
-                    except Exception:
-                        pass
+                attempt += 1
+                # Clear any prior error message before the new attempt so
+                # the UI stops showing a stale failure during retry.
+                self.error = None
+                self.status = 'downloading'
 
-                mode = 'ab' if existing > 0 else 'wb'
-                with open(self.part_path, mode) as out:
-                    chunk_size = 1024 * 1024  # 1 MB
-                    while True:
+                try:
+                    req = urllib.request.Request(self.url)
+                    if existing > 0:
+                        req.add_header('Range', f'bytes={existing}-')
+
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        cl = resp.headers.get('Content-Length')
+                        cr = resp.headers.get('Content-Range')
+                        if cr and '/' in cr:
+                            try:
+                                self.expected_size = int(cr.split('/')[-1])
+                            except Exception:
+                                pass
+                        elif cl and existing == 0:
+                            try:
+                                self.expected_size = int(cl)
+                            except Exception:
+                                pass
+
+                        mode = 'ab' if existing > 0 else 'wb'
+                        with open(self.part_path, mode) as out:
+                            chunk_size = 1024 * 1024
+                            while True:
+                                if self.cancel_flag.is_set():
+                                    self.status = 'cancelled'
+                                    return
+                                chunk = resp.read(chunk_size)
+                                if not chunk:
+                                    break
+                                out.write(chunk)
+                                self.downloaded += len(chunk)
+
+                    # Made it through without exception. Done.
+                    last_error = None
+                    break
+
+                except (urllib.error.URLError, ConnectionError, TimeoutError, OSError) as e:
+                    # Transient network failure. Back off and retry. We
+                    # explicitly catch the error classes that cover DNS
+                    # failures (URLError [Errno 8]), connection drops,
+                    # socket timeouts, and broken pipe writes. Any other
+                    # exception type falls through to the outer handler
+                    # and ends the download.
+                    last_error = f"{type(e).__name__}: {e}"
+                    if attempt >= MAX_ATTEMPTS:
+                        # Final attempt also failed. Let the outer handler
+                        # mark this as a hard error.
+                        raise
+                    # Exponential backoff capped at 60s. We sleep with the
+                    # cancel_flag check so the user can still cancel during
+                    # backoff (otherwise a slow retry chain looks frozen).
+                    backoff = min(5 * (2 ** (attempt - 1)), 60)
+                    self.status = 'retrying'
+                    self.error = (
+                        f"{last_error}\n"
+                        f"Network failure, retrying in {backoff}s "
+                        f"(attempt {attempt}/{MAX_ATTEMPTS})"
+                    )
+                    # Sleep in 1s slices so cancel still feels instant.
+                    deadline = time.time() + backoff
+                    while time.time() < deadline:
                         if self.cancel_flag.is_set():
                             self.status = 'cancelled'
                             return
-                        chunk = resp.read(chunk_size)
-                        if not chunk:
-                            break
-                        out.write(chunk)
-                        self.downloaded += len(chunk)
+                        time.sleep(1.0)
 
-            # Atomic rename
+            # Atomic rename. By here the .part file is complete or we'd
+            # have raised in the loop above.
             self.part_path.rename(self.dest_path)
             self.status = 'done'
             self.finished_at = time.time()
-            # If this was a ZIM, the running shim hasn't loaded it yet.
-            # Trigger a debounced restart so ARCHIVES picks it up and the
-            # user can actually open what they just downloaded. Debouncing
-            # collapses the 1-per-ZIM restart bursts during multi-download
-            # runs into a single restart after the last one.
+            self.error = None
             try:
                 if self.dest_path.suffix == '.zim':
                     _schedule_shim_reload()
             except Exception:
                 pass
-            # Persist installed catalog id + current model selection so the
-            # state survives a clean shutdown even if the user never finishes
-            # the wizard's "Setup Complete" step. installed_ids() is
-            # disk-derived and authoritative, but we mirror it into state.json
-            # for diagnostics and so the wizard's resume logic has somewhere
-            # to read theme/model preferences from on the very next launch.
             try:
                 _persist_state_after_download()
             except Exception:
                 pass
         except Exception as e:
             self.status = 'error'
-            self.error = f"{type(e).__name__}: {e}"
+            # Use the last network error if we have one (more useful than
+            # a re-raised wrapper). The retry loop sets last_error on each
+            # transient failure.
+            self.error = last_error or f"{type(e).__name__}: {e}"
             self.finished_at = time.time()
 
     def cancel(self):
@@ -445,7 +500,7 @@ def retry_download(item_id):
 
     Resume is implicit: Download._run reads any existing .part file size and
     sends a Range header, so the new attempt picks up where the last one
-    stopped. We need this for the wizard's per-row Retry button — the only
+    stopped. We need this for the wizard's per-row Retry button. The only
     other path was 'cancel everything and start over', which loses progress
     on the downloads that succeeded.
 
@@ -460,7 +515,7 @@ def retry_download(item_id):
         if d.status in ('queued', 'downloading', 'done'):
             return False
         # Reset state so the UI shows a fresh attempt. The .part file on disk
-        # stays — Download._run picks it up via the existing-bytes check.
+        # stays. Download._run picks it up via the existing-bytes check.
         d.status = 'queued'
         d.error = None
         d.finished_at = None
@@ -477,7 +532,7 @@ def clear_download(item_id):
     which deletes the finalized .zim by catalog prefix.
 
     Returns True if anything was cleared, False if the id is unknown or
-    still active (we refuse to clear a running download — caller should
+    still active. We refuse to clear a running download; caller should
     cancel first, then clear).
     """
     with _DOWNLOADS_LOCK:
@@ -486,7 +541,7 @@ def clear_download(item_id):
             return False
         if d.status in ('queued', 'downloading'):
             return False
-        # Best-effort delete of the partial. Silently swallow errors — the
+        # Best-effort delete of the partial. Silently swallow errors; the
         # tracker entry comes off either way so the user isn't soft-locked.
         try:
             if d.part_path.exists():
@@ -670,7 +725,7 @@ def dispatch_get(path, qs):
             'theme': st.get('theme', 'terminal'),
             'model': st.get('model', '3b'),
             'disk': disk_for(_INSTALL_DIR),
-            'version': '1.3.6',
+            'version': '1.3.7',
             'author': 'Henry Ratterman',
             'author_url': 'https://henryratterman.com',
         })

@@ -216,6 +216,7 @@
   .dl-row .status { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
   .status.queued { color: var(--muted); }
   .status.downloading { color: var(--accent); }
+  .status.retrying { color: var(--warn); }
   .status.done { color: var(--good); }
   .status.error { color: var(--bad); }
   .status.cancelled { color: var(--muted); }
@@ -539,9 +540,42 @@ async function init() {
   renderCatalog();
   updateMeter();
   setupModelPick();
-  // If the user already finished setup before, skip the drive picker.
-  // Re-running the wizard means "add more ZIMs", not "move my data".
-  if (STATUS && (STATUS.setup_complete || (STATUS.installed_ids || []).length > 0)) {
+
+  // Decide which step to land on. The previous logic only checked
+  // setup_complete and installed_ids, which meant a user with active
+  // OR errored downloads got dumped back to Step 1 (drive picker) on
+  // every reopen, looking like progress was lost. It wasn't lost; the
+  // shim subprocess kept the downloads alive, but the UI never showed
+  // them again until 'Setup Complete' fired, which it never does if
+  // downloads stall.
+  //
+  // Priority order:
+  //   1. Active or recent downloads exist  -> Step 4 (download progress)
+  //   2. Setup already complete            -> Step 2 (add more ZIMs)
+  //   3. Fresh install                     -> Step 1 (drive picker)
+  let progressData = null;
+  try {
+    const r = await fetch('/api/download/progress');
+    progressData = await r.json();
+  } catch (e) {}
+
+  const dls = (progressData && progressData.downloads) || [];
+  const hasLiveOrFailed = dls.some(d =>
+    d.status === 'queued' || d.status === 'downloading' ||
+    d.status === 'retrying' || d.status === 'error'
+  );
+
+  if (hasLiveOrFailed) {
+    // Resume the download progress view. Pre-populate SELECTED so the
+    // meter shows what's in flight.
+    for (const d of dls) {
+      if (d.id && !d.id.startsWith('llm_') && !d.id.startsWith('url_')) {
+        SELECTED.add(d.id);
+      }
+    }
+    goStep(3);
+    pollProgress();
+  } else if (STATUS && (STATUS.setup_complete || (STATUS.installed_ids || []).length > 0)) {
     goStep(1);
   } else {
     loadDrives();
@@ -887,14 +921,16 @@ async function refreshProgress() {
     const res = await fetch('/api/download/progress');
     const data = await res.json();
     renderDownloads(data.downloads);
-    // Stop polling once nothing is actively moving. We DO leave the timer
-    // running while there are 'error' or 'cancelled' rows so the user can
-    // hit Retry and see updated state without a hard refresh.
-    const inProgress = data.downloads.filter(d => d.status === 'queued' || d.status === 'downloading').length;
+    // 'retrying' counts as in-progress: a backoff sleep is in flight,
+    // the engine will reconnect automatically. Don't enable finishBtn
+    // until everything is genuinely terminal (done/error/cancelled).
+    const inProgress = data.downloads.filter(d =>
+      d.status === 'queued' || d.status === 'downloading' || d.status === 'retrying'
+    ).length;
     if (inProgress === 0 && data.downloads.length > 0) {
-      // Enable the finish button when at least one download succeeded —
-      // partial completion is a legitimate end state if the user gives up
-      // on a stubborn error. Hard-locking finishBtn behind 100% would soft-
+      // Enable the finish button when at least one download succeeded.
+      // Partial completion is a legit end state if user gives up on a
+      // stubborn error. Hard-locking finishBtn behind 100% would soft-
       // lock the wizard exactly the way Henry hit it.
       const anyDone = data.downloads.some(d => d.status === 'done');
       document.getElementById('finishBtn').disabled = !anyDone;
@@ -932,7 +968,11 @@ function renderDownloads(downloads) {
           <button class="btn-mini" onclick="retryDownload('${d.id}')">Retry</button>
           <button class="btn-mini danger" onclick="clearDownload('${d.id}')">Remove</button>
         </div>`;
-    } else if (d.status === 'queued' || d.status === 'downloading') {
+    } else if (d.status === 'queued' || d.status === 'downloading' || d.status === 'retrying') {
+      // Active download (or auto-retry sleep). Only Cancel makes sense.
+      // We deliberately do NOT show Retry on 'retrying' rows because the
+      // engine is already retrying automatically; manual Retry would be
+      // a no-op (or worse, race the auto-retry).
       actions = `
         <div class="dl-actions">
           <button class="btn-mini" onclick="cancelDownload('${d.id}')">Cancel</button>
