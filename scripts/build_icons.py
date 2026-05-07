@@ -119,7 +119,7 @@ def main():
     # Master + downsized PNGs
     master = draw_master(1024)
     master.save(ASSETS / 'icon-1024.png')
-    print(f"  ✓ icon-1024.png")
+    print(f"  [ok] icon-1024.png")
     
     sizes = [512, 256, 128, 64, 48, 32, 16]
     pngs = {}
@@ -128,18 +128,18 @@ def main():
         path = ASSETS / f'icon-{s}.png'
         img.save(path)
         pngs[s] = path
-        print(f"  ✓ icon-{s}.png")
+        print(f"  [ok] icon-{s}.png")
     
     # Tray icon
     tray = draw_tray(64)
     tray.save(ASSETS / 'icon-tray.png')
-    print(f"  ✓ icon-tray.png")
+    print(f"  [ok] icon-tray.png")
     
     # Windows .ico (multi-res)
     ico_path = ASSETS / 'icon.ico'
     master.save(ico_path, format='ICO',
                 sizes=[(s, s) for s in [16, 32, 48, 64, 128, 256]])
-    print(f"  ✓ icon.ico")
+    print(f"  [ok] icon.ico")
     
     # macOS .icns (requires `iconutil` from Xcode CLT, or fall back to Pillow)
     iconset = ASSETS / 'icon.iconset'
@@ -163,9 +163,9 @@ def main():
     if sys.platform == 'darwin':
         try:
             subprocess.check_call(['iconutil', '-c', 'icns', str(iconset), '-o', str(icns_path)])
-            print(f"  ✓ icon.icns")
+            print(f"  [ok] icon.icns")
         except Exception as e:
-            print(f"  ✗ icon.icns failed: {e}")
+            print(f"  [fail] icon.icns failed: {e}")
             print(f"    (PNG iconset still available at {iconset})")
     else:
         print(f"  - icon.icns (skipped, not on macOS, iconset preserved)")
