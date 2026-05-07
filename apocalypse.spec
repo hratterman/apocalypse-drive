@@ -53,6 +53,7 @@ def _find_libzim():
 datas = [
     (str(ROOT / 'bin' / 'kiwix_shim.py'),     'bin'),
     (str(ROOT / 'bin' / 'setup_routes.py'),   'bin'),
+    (str(ROOT / 'bin' / 'kiwix_opds.py'),     'bin'),
     (str(ROOT / 'bin' / 'templates'),         'bin/templates'),
     (str(ROOT / 'data' / 'catalog.json'),     'data'),
     (str(ROOT / 'Apocalypse.html'),           '.'),
@@ -71,6 +72,8 @@ hiddenimports = [
     'libzim.suggestion',
     'uuid',                # libzim imports this at init time
     'datetime',
+    'setup_routes',        # imported dynamically by kiwix_shim
+    'kiwix_opds',          # imported dynamically by setup_routes
     'pystray._darwin',     # macOS
     'pystray._win32',      # Windows
     'pystray._gtk',        # Linux GTK

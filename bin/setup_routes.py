@@ -6,10 +6,13 @@ Plugs into kiwix_shim.py via dispatch_setup() / dispatch_setup_post().
 Routes:
   GET  /setup                  -> setup wizard HTML (first-run)
   GET  /admin                  -> admin/library management HTML
-  GET  /api/catalog            -> JSON catalog (curated ZIMs + bundles)
+  GET  /api/catalog            -> JSON catalog (curated ZIMs + bundles), live-hydrated
+  GET  /api/catalog?fresh=1    -> force re-fetch from Kiwix (skip cache)
   GET  /api/status             -> JSON system status (installed ZIMs, downloads, services)
   GET  /api/disk?path=<p>      -> JSON {free, total} for given path
+  GET  /api/browse?q=&page=    -> live Kiwix library search/browse (paginated)
   POST /api/download/start     -> start downloads {ids: [...], dest_dir: "...", model: "3b"|"8b"|"none"}
+  POST /api/download/start_url -> start a download by direct URL {url, name, size}
   GET  /api/download/progress  -> JSON list of {id, name, total, downloaded, status}
   POST /api/download/cancel    -> cancel a running download {id: "..."}
   POST /api/download/remove    -> delete an installed ZIM {id: "..."} (frees disk)
@@ -29,10 +32,23 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+# Sibling module for OPDS access. Optional: if it fails to import or its
+# network calls fail, the whole app degrades gracefully to baked-in catalog.
+try:
+    from . import kiwix_opds  # type: ignore
+except ImportError:
+    try:
+        import kiwix_opds  # type: ignore
+    except ImportError:
+        kiwix_opds = None  # type: ignore
+
 # --- Module state -----------------------------------------------------------
 
 _INSTALL_DIR = None        # Path: where the apocalypse drive lives
-_CATALOG = None            # dict: parsed catalog.json
+_CATALOG = None            # dict: parsed catalog.json (baked-in)
+_HYDRATED_CATALOG = None   # dict: catalog + live OPDS field overrides
+_HYDRATED_AT = 0.0         # epoch seconds of last successful hydration
+_HYDRATION_LOCK = threading.Lock()
 _DOWNLOADS = {}            # id -> Download object
 _DOWNLOADS_LOCK = threading.Lock()
 _SHIM_RESTART_HOOK = None  # callable: triggers shim to reload ZIMs
@@ -49,6 +65,48 @@ def init(install_dir, catalog_path, restart_hook=None):
     (_INSTALL_DIR / 'kiwix' / 'zim').mkdir(parents=True, exist_ok=True)
     (_INSTALL_DIR / 'llm').mkdir(parents=True, exist_ok=True)
     (_INSTALL_DIR / 'logs').mkdir(parents=True, exist_ok=True)
+
+    # Kick off background hydration so first wizard request is fast
+    if kiwix_opds is not None:
+        threading.Thread(target=_hydrate_in_background, daemon=True).start()
+
+
+def _hydrate_in_background():
+    """Fetch live OPDS data and update _HYDRATED_CATALOG. Safe to fail."""
+    global _HYDRATED_CATALOG, _HYDRATED_AT
+    if kiwix_opds is None or _CATALOG is None:
+        return
+    try:
+        result = kiwix_opds.hydrate_catalog(_CATALOG)
+        with _HYDRATION_LOCK:
+            _HYDRATED_CATALOG = result
+            _HYDRATED_AT = time.time()
+    except Exception:
+        # Network down, DNS, etc. Silent fail; serve baked-in catalog.
+        pass
+
+
+def _serve_catalog(force_fresh=False):
+    """
+    Return the hydrated catalog if we have one, else the baked-in catalog.
+    If force_fresh=True, blocks for one synchronous re-hydration attempt.
+    """
+    if force_fresh and kiwix_opds is not None:
+        _hydrate_in_background()  # synchronous when called inline (not in thread)
+        # Actually do it synchronously:
+        try:
+            result = kiwix_opds.hydrate_catalog(_CATALOG)
+            with _HYDRATION_LOCK:
+                global _HYDRATED_CATALOG, _HYDRATED_AT
+                _HYDRATED_CATALOG = result
+                _HYDRATED_AT = time.time()
+        except Exception:
+            pass
+
+    with _HYDRATION_LOCK:
+        if _HYDRATED_CATALOG is not None:
+            return _HYDRATED_CATALOG
+    return _CATALOG
 
 
 def is_initialized():
@@ -113,7 +171,7 @@ def installed_ids():
     """Return list of curated catalog IDs that are present on disk."""
     files_by_name = {name: path for name, path in installed_zim_files()}
     found = []
-    for item in _CATALOG['items']:
+    for item in _active_catalog()['items']:
         # ZIM filenames embed a date suffix (e.g. wikipedia_en_all_maxi_2024-09)
         # Match by prefix
         prefix = item['kiwix_name']
@@ -221,8 +279,16 @@ class Download:
         self.cancel_flag.set()
 
 
+def _active_catalog():
+    """Use hydrated catalog if available, else baked-in. Used by lookup helpers."""
+    with _HYDRATION_LOCK:
+        if _HYDRATED_CATALOG is not None:
+            return _HYDRATED_CATALOG
+    return _CATALOG
+
+
 def _get_item(item_id):
-    for it in _CATALOG['items']:
+    for it in _active_catalog()['items']:
         if it['id'] == item_id:
             return it
     return None
@@ -338,7 +404,41 @@ def dispatch_get(path, qs):
         body = _read_template('about.html').encode('utf-8')
         return 200, [('Content-Type', 'text/html; charset=utf-8')], body
     if path == '/api/catalog':
-        return _json_response(_CATALOG)
+        force = (qs.get('fresh') or ['0'])[0] in ('1', 'true', 'yes')
+        catalog = _serve_catalog(force_fresh=force)
+        # Decorate with hydration metadata so UI can show "as of X"
+        out = dict(catalog)
+        with _HYDRATION_LOCK:
+            out['_hydrated_at'] = _HYDRATED_AT
+            out['_is_live'] = _HYDRATED_CATALOG is not None
+        return _json_response(out)
+    if path == '/api/browse':
+        if kiwix_opds is None:
+            return _json_response({
+                'total': 0, 'page': 1, 'page_size': 30, 'total_pages': 0,
+                'entries': [], 'error': 'OPDS module unavailable',
+            })
+        q = (qs.get('q') or [''])[0]
+        try:
+            page = int((qs.get('page') or ['1'])[0])
+        except ValueError:
+            page = 1
+        try:
+            page_size = int((qs.get('page_size') or ['30'])[0])
+        except ValueError:
+            page_size = 30
+        # Annotate results with installed status so UI can grey out installed entries
+        result = kiwix_opds.browse(query=q, page=page, page_size=page_size)
+        installed_names = {name for name, _ in installed_zim_files()}
+        for entry in result['entries']:
+            # An entry is installed if any file on disk starts with name+flavour
+            prefix_no_flav = entry['name']
+            prefix_with_flav = f"{entry['name']}_{entry['flavour']}" if entry['flavour'] else entry['name']
+            entry['installed'] = any(
+                f.startswith(prefix_with_flav) or f.startswith(prefix_no_flav)
+                for f in installed_names
+            )
+        return _json_response(result)
     if path == '/api/status':
         st = load_state()
         return _json_response({
@@ -348,7 +448,7 @@ def dispatch_get(path, qs):
             'theme': st.get('theme', 'terminal'),
             'model': st.get('model', '3b'),
             'disk': disk_for(_INSTALL_DIR),
-            'version': '1.0.0',
+            'version': '1.1.0',
             'author': 'Henry Ratterman',
             'author_url': 'https://henryratterman.com',
         })
@@ -375,6 +475,32 @@ def dispatch_post(path, body):
         model = body.get('model', '3b')
         started = start_downloads(ids, model)
         return _json_response({'started': started})
+    if path == '/api/download/start_url':
+        # Install a ZIM by direct URL (used by Browse tab for non-curated entries)
+        url = body.get('url', '').strip()
+        title = body.get('name', '').strip() or url.rsplit('/', 1)[-1]
+        try:
+            size = int(body.get('size', 0))
+        except (TypeError, ValueError):
+            size = 0
+        if not url or not url.startswith(('http://', 'https://')):
+            return _json_response({'started': False, 'error': 'invalid url'})
+        # Strip .meta4 if Kiwix gave us the metalink
+        if url.endswith('.meta4'):
+            url = url[:-len('.meta4')]
+        fname = url.rsplit('/', 1)[-1]
+        # Synthesize a stable id from filename (without .zim)
+        item_id = f"url_{fname.replace('.zim', '')}"
+        zim_dir = _INSTALL_DIR / 'kiwix' / 'zim'
+        dest = zim_dir / fname
+        with _DOWNLOADS_LOCK:
+            existing = _DOWNLOADS.get(item_id)
+            if existing and existing.status in ('downloading', 'queued', 'done'):
+                return _json_response({'started': False, 'reason': 'already running', 'id': item_id})
+            d = Download(item_id, title, url, dest, size)
+            _DOWNLOADS[item_id] = d
+            d.start()
+        return _json_response({'started': True, 'id': item_id})
     if path == '/api/download/cancel':
         ok = cancel_download(body.get('id'))
         return _json_response({'cancelled': ok})

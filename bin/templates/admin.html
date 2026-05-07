@@ -105,6 +105,39 @@
 
   .empty { color: var(--muted); font-style: italic; padding: 16px; text-align: center; }
 
+  .browse-controls {
+    display: flex; gap: 10px; align-items: stretch;
+  }
+  .browse-controls input[type="search"] {
+    flex: 1; padding: 9px 14px;
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 6px;
+    font-size: 14px; font-family: inherit;
+  }
+  .browse-controls input[type="search"]:focus {
+    outline: none; border-color: var(--accent);
+  }
+  .browse-pager {
+    display: flex; gap: 10px; align-items: center; justify-content: center;
+    margin-top: 16px; color: var(--muted); font-size: 13px;
+  }
+  .browse-pager .pageinfo { font-family: "SF Mono", Menlo, Consolas, monospace; }
+  .lib.lang-tag {
+    display: inline-block;
+    background: var(--panel-2); color: var(--muted);
+    padding: 1px 7px; border-radius: 4px; font-size: 11px;
+    margin-right: 6px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .lib.installed-tag {
+    background: rgba(74,222,128,0.15); color: var(--good);
+    padding: 1px 7px; border-radius: 4px; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;
+  }
+  .browse-source-label {
+    font-size: 12px; color: var(--muted); font-weight: 400;
+    text-transform: none; letter-spacing: normal;
+  }
+
   .signature {
     margin-top: 60px; padding: 20px 28px; text-align: center;
     color: var(--muted); font-size: 12px;
@@ -166,6 +199,23 @@
     <h2>Available to Add</h2>
     <div class="lib-grid" id="available"></div>
   </div>
+
+  <!-- Browse all Kiwix -->
+  <div class="section">
+    <h2>
+      Browse All Kiwix
+      <span class="actions" id="browseSourceLabel"></span>
+    </h2>
+    <p class="lede" style="margin: -4px 0 14px; font-size: 13px;">
+      Search the live Kiwix catalog. Anything in the world Kiwix publishes, you can install with one click. Falls back gracefully when offline.
+    </p>
+    <div class="browse-controls">
+      <input type="search" id="browseQuery" placeholder="search wikipedia, gutenberg, language code, anything..." autocomplete="off">
+      <button class="btn primary" id="browseSearchBtn">Search</button>
+    </div>
+    <div id="browseResults" class="lib-grid" style="margin-top: 12px;"></div>
+    <div id="browsePager" class="browse-pager"></div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -193,9 +243,23 @@ async function refresh() {
     renderStats();
     renderDownloads(p.downloads);
     renderLibraries();
+    renderBrowseSourceLabel();
     document.getElementById('installPath').textContent = STATUS.install_dir;
   } catch (e) {
     console.error(e);
+  }
+}
+
+function renderBrowseSourceLabel() {
+  const el = document.getElementById('browseSourceLabel');
+  if (!el) return;
+  if (CATALOG._is_live) {
+    const ts = new Date((CATALOG._hydrated_at || 0) * 1000);
+    el.className = 'browse-source-label';
+    el.innerHTML = `<span style="color: var(--good)">●</span> live · curated catalog refreshed ${ts.toLocaleTimeString()}`;
+  } else {
+    el.className = 'browse-source-label';
+    el.innerHTML = `<span style="color: var(--warn)">●</span> offline · using bundled catalog`;
   }
 }
 
@@ -372,6 +436,138 @@ function toast(msg) {
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), 2500);
 }
+
+// --- Browse all Kiwix ----------------------------------------------------
+
+let browseState = { query: '', page: 1, total: 0, totalPages: 0, lastQuery: null };
+
+async function runBrowse(opts = {}) {
+  const q = (opts.query !== undefined) ? opts.query : browseState.query;
+  const page = opts.page || 1;
+  browseState.query = q;
+  browseState.page = page;
+
+  const results = document.getElementById('browseResults');
+  const pager = document.getElementById('browsePager');
+  results.innerHTML = '<div class="empty">Searching Kiwix library...</div>';
+  pager.innerHTML = '';
+
+  const url = `/api/browse?q=${encodeURIComponent(q)}&page=${page}&page_size=30`;
+  try {
+    const data = await fetch(url).then(r => r.json());
+    browseState.total = data.total;
+    browseState.totalPages = data.total_pages;
+    browseState.lastQuery = q;
+
+    if (data.error) {
+      results.innerHTML = `<div class="empty">Kiwix unreachable. (${data.error}). Try again later.</div>`;
+      return;
+    }
+    if (!data.entries.length) {
+      results.innerHTML = `<div class="empty">No matches for "${escapeHtml(q)}".</div>`;
+      return;
+    }
+
+    results.innerHTML = '';
+    for (const e of data.entries) {
+      results.appendChild(browseRow(e));
+    }
+    renderBrowsePager();
+  } catch (err) {
+    results.innerHTML = `<div class="empty">Browse failed: ${err.message}</div>`;
+  }
+}
+
+function browseRow(entry) {
+  const row = document.createElement('div');
+  row.className = 'lib';
+
+  const flav = entry.flavour ? `${entry.flavour} · ` : '';
+  const articles = entry.article_count > 0 ? `${entry.article_count.toLocaleString()} articles · ` : '';
+  const date = entry.issued ? entry.issued.slice(0, 10) : '';
+  const lang = entry.language || '';
+  const installedTag = entry.installed
+    ? '<span class="lib installed-tag" style="margin-right:8px">Installed</span>'
+    : '';
+  const langTag = lang ? `<span class="lib lang-tag">${escapeHtml(lang)}</span>` : '';
+
+  const action = entry.installed
+    ? `<button class="btn" disabled style="opacity:0.5">Installed</button>`
+    : `<button class="btn primary" data-url="${escapeAttr(entry.download_url)}" data-name="${escapeAttr(entry.title)}" data-size="${entry.size_bytes}">Install</button>`;
+
+  row.innerHTML = `
+    <div class="info">
+      <div class="title">${installedTag}${escapeHtml(entry.title)}</div>
+      <div class="sub">${langTag}${flav}${articles}${date}</div>
+      ${entry.summary ? `<div class="sub" style="margin-top:4px; font-size:12px; opacity:0.8">${escapeHtml(entry.summary).slice(0, 220)}${entry.summary.length > 220 ? '...' : ''}</div>` : ''}
+    </div>
+    <div class="size">${fmtBytes(entry.size_bytes)}</div>
+    ${action}
+  `;
+  const btn = row.querySelector('button.primary');
+  if (btn) {
+    btn.addEventListener('click', async () => {
+      const url = btn.dataset.url, name = btn.dataset.name, size = parseInt(btn.dataset.size || '0', 10);
+      btn.disabled = true; btn.textContent = 'Starting...';
+      try {
+        const r = await fetch('/api/download/start_url', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({url, name, size}),
+        });
+        const j = await r.json();
+        if (j.started) {
+          toast(`Started: ${name}`);
+          schedulePoll();
+          btn.textContent = 'Queued';
+        } else {
+          toast(j.reason || j.error || 'Could not start');
+          btn.disabled = false; btn.textContent = 'Install';
+        }
+      } catch (err) {
+        toast(`Error: ${err.message}`);
+        btn.disabled = false; btn.textContent = 'Install';
+      }
+    });
+  }
+  return row;
+}
+
+function renderBrowsePager() {
+  const pager = document.getElementById('browsePager');
+  const { page, totalPages, total } = browseState;
+  if (totalPages <= 1) {
+    pager.innerHTML = `<span class="pageinfo">${total} result${total === 1 ? '' : 's'}</span>`;
+    return;
+  }
+  const prevDisabled = page <= 1;
+  const nextDisabled = page >= totalPages;
+  pager.innerHTML = `
+    <button class="btn" ${prevDisabled ? 'disabled style="opacity:0.4"' : ''} id="prevPage">← Prev</button>
+    <span class="pageinfo">page ${page} of ${totalPages} · ${total.toLocaleString()} matches</span>
+    <button class="btn" ${nextDisabled ? 'disabled style="opacity:0.4"' : ''} id="nextPage">Next →</button>
+  `;
+  if (!prevDisabled) pager.querySelector('#prevPage').onclick = () => runBrowse({ page: page - 1 });
+  if (!nextDisabled) pager.querySelector('#nextPage').onclick = () => runBrowse({ page: page + 1 });
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+document.addEventListener('DOMContentLoaded', () => {
+  const input = document.getElementById('browseQuery');
+  const btn = document.getElementById('browseSearchBtn');
+  const go = () => runBrowse({ query: input.value.trim(), page: 1 });
+  if (btn) btn.addEventListener('click', go);
+  if (input) {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); go(); }
+    });
+  }
+  runBrowse({ query: '', page: 1 });
+});
 
 refresh();
 </script>

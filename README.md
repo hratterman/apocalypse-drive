@@ -161,6 +161,16 @@ The official `kiwix-serve` binary doesn't work with Wikipedia ZIMs on macOS+exFA
 
 ---
 
+## Live catalog and full Kiwix browse
+
+The app pulls live metadata from Kiwix every time it runs, so URLs and sizes for the curated 40 ZIMs always point at the freshest available version. If Kiwix is unreachable (no internet, server down) the app silently falls back to the bundled catalog and keeps working.
+
+The Library page also has a **Browse All Kiwix** section that searches the entire live Kiwix library (currently ~3,500 entries across every language and topic Kiwix publishes). Anything they offer, you can install with one click. Curated bundles are a good starting point. Browse is for when you want everything else.
+
+![Browse all Kiwix](docs/screenshots/admin-browse-kiwix.png)
+
+---
+
 ## Customization
 
 | Want to | Edit |
