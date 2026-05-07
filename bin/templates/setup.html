@@ -219,6 +219,18 @@
   .status.done { color: var(--good); }
   .status.error { color: var(--bad); }
   .status.cancelled { color: var(--muted); }
+  .dl-error {
+    margin-top: 6px; padding: 8px 10px;
+    background: rgba(248, 113, 113, 0.08);
+    border-left: 3px solid var(--bad);
+    border-radius: 4px;
+    color: var(--bad);
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    word-break: break-word;
+    white-space: pre-wrap;
+  }
 
   .summary {
     background: var(--panel-2); border: 1px solid var(--border);
@@ -612,9 +624,9 @@ function renderDownloads(downloads) {
         <div class="stats">
           <span class="status ${d.status}">${d.status}</span>
           ${d.total > 0 ? ` · ${fmtBytes(d.downloaded)} / ${fmtBytes(d.total)} · ${pct.toFixed(1)}%` : ''}
-          ${d.error ? ` · ${d.error}` : ''}
         </div>
       </div>
+      ${d.error ? `<div class="dl-error">${escapeHtmlForError(d.error)}</div>` : ''}
       <div class="dl-bar"><div class="fill ${fillClass}" style="width:${pct}%"></div></div>
     `;
     list.appendChild(row);
@@ -638,6 +650,10 @@ async function finishSetup() {
 }
 
 // ============= Helpers =============
+function escapeHtmlForError(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 function fmtBytes(n) {
   if (!n) return '0 B';
   if (n < 1024) return n + ' B';

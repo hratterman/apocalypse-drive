@@ -24,6 +24,7 @@ import mimetypes
 import os
 import re
 import sys
+import time
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -1013,11 +1014,35 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     global ZIM_DIR, ARCHIVES
+
+    # Make sure HTTPS works in PyInstaller-frozen bundles. The bundled Python
+    # has no system cert store path configured (no homebrew on user's Mac,
+    # no /etc/ssl on Windows), so any urllib.request HTTPS call would fail
+    # with "certificate verify failed" -> URLError to the user. Fix by
+    # pointing both env vars AND ssl's default context at certifi's bundle.
+    try:
+        import certifi
+        import ssl as _ssl
+        ca_file = certifi.where()
+        os.environ['SSL_CERT_FILE'] = ca_file
+        os.environ['REQUESTS_CA_BUNDLE'] = ca_file
+        # Override ssl.create_default_context so every urlopen() call picks up
+        # the certifi bundle, regardless of whether OpenSSL read the env var.
+        _orig_create_default = _ssl.create_default_context
+        def _patched_create_default(*a, **kw):
+            kw.setdefault('cafile', ca_file)
+            return _orig_create_default(*a, **kw)
+        _ssl.create_default_context = _patched_create_default
+    except Exception as _e:
+        # If certifi isn't bundled (unlikely), fall back to system store.
+        pass
+
     p = argparse.ArgumentParser()
     p.add_argument('--port', type=int, default=8888)
     p.add_argument('--install-dir', default=None,
                    help='Apocalypse install directory (e.g. /Volumes/Media/apocalypse). '
-                        'If set, ZIM dir defaults to <install-dir>/kiwix/zim and setup wizard is enabled.')
+                        'If set, ZIM dir defaults to <install-dir>/kiwix/zim and setup '
+                        'wizard is enabled.')
     p.add_argument('--zim-dir', default=None,
                    help='Override ZIM directory (defaults to <install-dir>/kiwix/zim or /Volumes/Media/apocalypse/kiwix/zim)')
     p.add_argument('--host', default='127.0.0.1')
@@ -1025,8 +1050,24 @@ def main():
                    help='Path to data/catalog.json (defaults to ../data/catalog.json relative to this script)')
     args = p.parse_args()
 
-    # Resolve install dir + zim dir
     install_dir = args.install_dir
+    # When running as a PyInstaller-frozen subprocess, stdout/stderr are
+    # often discarded (console=False bundles). Tee them to a log file so
+    # we can debug user reports.
+    if hasattr(sys, '_MEIPASS') and install_dir:
+        try:
+            log_dir = os.path.join(install_dir, 'logs')
+            os.makedirs(log_dir, exist_ok=True)
+            log_path = os.path.join(log_dir, 'shim.log')
+            log_fp = open(log_path, 'a', buffering=1)
+            log_fp.write(f"\n=== shim start {time.strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()} ===\n")
+            log_fp.write(f"argv: {sys.argv}\n")
+            log_fp.write(f"_MEIPASS: {sys._MEIPASS}\n")
+            log_fp.flush()
+            sys.stdout = log_fp
+            sys.stderr = log_fp
+        except Exception as _e:
+            pass
     if install_dir:
         install_dir = os.path.abspath(install_dir)
     zim_dir = args.zim_dir

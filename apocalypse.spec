@@ -74,6 +74,8 @@ hiddenimports = [
     'datetime',
     'setup_routes',        # imported dynamically by kiwix_shim
     'kiwix_opds',          # imported dynamically by setup_routes
+    'certifi',             # SSL cert bundle for HTTPS downloads
+    'ssl',
     'pystray._darwin',     # macOS
     'pystray._win32',      # Windows
     'pystray._gtk',        # Linux GTK
