@@ -45,7 +45,7 @@ A 2 TB external drive that, when plugged into any Mac, Linux, or Windows machine
 
 You ask a question. The system asks the LLM what Wikipedia article(s) might answer it, fetches those articles from the offline ZIMs, scores relevance, extracts focused sections, and generates a sourced answer with citations. Total round trip on a recent Mac: **20 to 40 seconds.** No packets to the internet. Ever.
 
-> Built for: power outages, travel, hostile networks, places where you don't trust the cloud, and the vague unease that the world's reference shelf shouldn't live on someone else's server.
+> Built for: power outages, travel, hostile networks, places where you don't trust the cloud, and of course, the Apocalypse.
 
 ---
 
