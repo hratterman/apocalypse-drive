@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" font-family="ui-monospace, SF Mono, Menlo, Consolas, monospace">
+  <defs>
+    <radialGradient id="vignette" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#1a0a00" stop-opacity="1"/>
+      <stop offset="80%" stop-color="#0a0500" stop-opacity="1"/>
+    </radialGradient>
+    <pattern id="scanlines" width="3" height="3" patternUnits="userSpaceOnUse">
+      <rect width="3" height="3" fill="transparent"/>
+      <rect width="3" height="1" y="2" fill="rgba(0,0,0,0.35)"/>
+    </pattern>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.2" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="360" fill="url(#vignette)"/>
+  <rect width="1280" height="360" fill="url(#scanlines)"/>
+
+  <!-- Amber bracket frame -->
+  <g stroke="#3a2400" stroke-width="2" fill="none">
+    <path d="M 24 24 L 24 60 M 24 24 L 60 24"/>
+    <path d="M 1256 24 L 1256 60 M 1256 24 L 1220 24"/>
+    <path d="M 24 336 L 24 300 M 24 336 L 60 336"/>
+    <path d="M 1256 336 L 1256 300 M 1256 336 L 1220 336"/>
+  </g>
+
+  <!-- Top status bar -->
+  <text x="50" y="50" fill="#8a5a1f" font-size="12">> APOCALYPSE://booting</text>
+  <text x="1230" y="50" fill="#4ade80" font-size="12" text-anchor="end">[ ALL SYSTEMS ONLINE ]</text>
+  <circle cx="1078" cy="46" r="4" fill="#4ade80">
+    <animate attributeName="opacity" values="1;0.4;1" dur="1.6s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Big ASCII logo, centered. Use 11px line-height-ish via dy. -->
+  <g fill="#ffb347" filter="url(#glow)" font-size="14" font-weight="bold" text-anchor="middle">
+    <text x="640" y="120" xml:space="preserve">    █████╗ ██████╗  ██████╗  ██████╗ █████╗ ██╗  ██╗   ██╗██████╗ ███████╗███████╗</text>
+    <text x="640" y="136" xml:space="preserve">   ██╔══██╗██╔══██╗██╔═══██╗██╔════╝██╔══██╗██║  ╚██╗ ██╔╝██╔══██╗██╔════╝██╔════╝</text>
+    <text x="640" y="152" xml:space="preserve">   ███████║██████╔╝██║   ██║██║     ███████║██║   ╚████╔╝ ██████╔╝███████╗█████╗  </text>
+    <text x="640" y="168" xml:space="preserve">   ██╔══██║██╔═══╝ ██║   ██║██║     ██╔══██║██║    ╚██╔╝  ██╔═══╝ ╚════██║██╔══╝  </text>
+    <text x="640" y="184" xml:space="preserve">   ██║  ██║██║     ╚██████╔╝╚██████╗██║  ██║███████╗██║   ██║     ███████║███████╗</text>
+    <text x="640" y="200" xml:space="preserve">   ╚═╝  ╚═╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝   ╚═╝     ╚══════╝╚══════╝</text>
+  </g>
+
+  <!-- Subtitle -->
+  <text x="640" y="240" fill="#ffcc66" font-size="14" text-anchor="middle" letter-spacing="3">OFFLINE KNOWLEDGE TERMINAL</text>
+
+  <!-- Divider -->
+  <line x1="440" y1="258" x2="840" y2="258" stroke="#3a2400" stroke-width="1"/>
+
+  <!-- Tagline -->
+  <text x="640" y="284" fill="#8a5a1f" font-size="13" text-anchor="middle">wikipedia · stack exchange · gutenberg · khan academy · plus a local llm</text>
+  <text x="640" y="304" fill="#8a5a1f" font-size="13" text-anchor="middle">on a usb drive, on any computer, with no internet</text>
+
+  <!-- Bottom blinking cursor block -->
+  <rect x="638" y="318" width="10" height="14" fill="#ffb347">
+    <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/>
+  </rect>
+</svg>

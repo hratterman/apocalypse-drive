@@ -1,5 +1,5 @@
 #!/bin/bash
-# Apocalypse Drive — installer
+# Apocalypse Drive: installer
 #
 # Bootstraps an empty drive (or any directory) into a working Apocalypse setup:
 #   1. Creates the directory layout
@@ -8,7 +8,7 @@
 #   3. Downloads two llamafiles: Llama 3.2 3B (smaller, ~2.7 GB, runs on 8 GB RAM)
 #      and Llama 3.1 8B (~4.9 GB, recommended on 16+ GB RAM)
 #   4. Writes the launchers and the README
-#   5. Runs the ZIM downloader (interactive — pick which knowledge bases you want)
+#   5. Runs the ZIM downloader (interactive: pick which knowledge bases you want)
 #
 # Default install location: current directory. Pass a path to install elsewhere:
 #   ./install.sh /Volumes/Media/apocalypse
@@ -89,7 +89,7 @@ cat <<'EOF'
    ██╔══██║██╔═══╝ ██║   ██║██║     ██╔══██║██║    ╚██╔╝  ██╔═══╝ ╚════██║██╔══╝
    ██║  ██║██║     ╚██████╔╝╚██████╗██║  ██║███████╗██║   ██║     ███████║███████╗
    ╚═╝  ╚═╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝   ╚═╝     ╚══════╝╚══════╝
-                       OFFLINE KNOWLEDGE TERMINAL — INSTALLER
+                       OFFLINE KNOWLEDGE TERMINAL: INSTALLER
 EOF
 echo
 echo "  Host OS:    $HOST_OS / $HOST_ARCH"
@@ -139,7 +139,7 @@ for entry in "${KIWIX_DLS[@]}"; do
 
   # Skip if binary already present
   if [ -x "$target_dir/kiwix-serve" ] || [ -x "$target_dir/kiwix-serve.exe" ]; then
-    ok "$platform — already installed, skipping"
+    ok "$platform: already installed, skipping"
     continue
   fi
 
@@ -149,7 +149,7 @@ for entry in "${KIWIX_DLS[@]}"; do
   url="$KIWIX_BASE/$archive"
 
   if ! curl --fail --location --show-error --silent -o "$tmp/$archive" "$url"; then
-    warn "Download failed for $platform — skipping (you can retry later)"
+    warn "Download failed for $platform: skipping (you can retry later)"
     rm -rf "$tmp"
     continue
   fi
@@ -189,8 +189,8 @@ fi
 echo "  Host RAM: ${RAM_GB} GB"
 echo
 echo "  Available models:"
-echo "    [1] Llama 3.2 3B Instruct Q6 (${LLAMA_3B_SIZE_GB} GB) — fits 8 GB RAM"
-echo "    [2] Llama 3.1 8B Instruct Q4 (${LLAMA_8B_SIZE_GB} GB) — recommended for 16+ GB RAM"
+echo "    [1] Llama 3.2 3B Instruct Q6 (${LLAMA_3B_SIZE_GB} GB): fits 8 GB RAM"
+echo "    [2] Llama 3.1 8B Instruct Q4 (${LLAMA_8B_SIZE_GB} GB): recommended for 16+ GB RAM"
 echo "    [3] Both (${LLAMA_3B_SIZE_GB} + ${LLAMA_8B_SIZE_GB} GB, runtime auto-picks)"
 echo "    [4] Skip (you'll need to provide your own llamafile)"
 echo
@@ -234,7 +234,7 @@ case "$model_choice" in
     download_llamafile "$LLAMA_3B_URL" "$LLAMA_3B_NAME" "$LLAMA_3B_SIZE_GB"
     download_llamafile "$LLAMA_8B_URL" "$LLAMA_8B_NAME" "$LLAMA_8B_SIZE_GB"
     ;;
-  4) warn "Skipping LLM download — drop a .llamafile into $INSTALL_DIR/llm/ before launching" ;;
+  4) warn "Skipping LLM download: drop a .llamafile into $INSTALL_DIR/llm/ before launching" ;;
   *) die "Invalid choice: $model_choice" ;;
 esac
 

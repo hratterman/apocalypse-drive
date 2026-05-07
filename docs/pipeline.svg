@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 380" font-family="ui-monospace, SF Mono, Menlo, Consolas, monospace">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#1a0a00"/>
+      <stop offset="100%" stop-color="#0a0500"/>
+    </radialGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#ffb347"/>
+    </marker>
+    <marker id="arrow-dim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#5a3a14"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="380" fill="url(#bg)"/>
+
+  <!-- Header -->
+  <text x="50" y="40" fill="#8a5a1f" font-size="12">> ./pipeline --trace</text>
+  <text x="640" y="44" fill="#ffcc66" font-size="14" text-anchor="middle" letter-spacing="2">QUERY → ANSWER</text>
+
+  <!-- Step boxes. Each is 180x90, with a number, title, and 2-line subtitle. -->
+  <g font-size="11">
+    <!-- Box 1: Question -->
+    <g transform="translate(40, 100)">
+      <rect width="180" height="90" fill="none" stroke="#3a2400" stroke-width="1.5"/>
+      <text x="14" y="22" fill="#5a3a14" font-size="10">[input]</text>
+      <text x="14" y="44" fill="#ffcc66" font-weight="bold">user question</text>
+      <text x="14" y="62" fill="#8a5a1f" font-size="10">"how does</text>
+      <text x="14" y="76" fill="#8a5a1f" font-size="10"> tylenol work?"</text>
+    </g>
+
+    <!-- Box 2: LLM title prediction -->
+    <g transform="translate(260, 100)">
+      <rect width="200" height="90" fill="none" stroke="#ffb347" stroke-width="1.5"/>
+      <text x="14" y="22" fill="#5a3a14" font-size="10">[stage 1] llm pass #1</text>
+      <text x="14" y="44" fill="#ffcc66" font-weight="bold">predict titles</text>
+      <text x="14" y="62" fill="#8a5a1f" font-size="10">→ ["Paracetamol",</text>
+      <text x="14" y="76" fill="#8a5a1f" font-size="10">   "Acetaminophen", ...]</text>
+    </g>
+
+    <!-- Box 3: Resolve to ZIM paths -->
+    <g transform="translate(500, 100)">
+      <rect width="200" height="90" fill="none" stroke="#ffb347" stroke-width="1.5"/>
+      <text x="14" y="22" fill="#5a3a14" font-size="10">[stage 2] libzim</text>
+      <text x="14" y="44" fill="#ffcc66" font-weight="bold">resolve paths</text>
+      <text x="14" y="62" fill="#8a5a1f" font-size="10">→ /Paracetamol</text>
+      <text x="14" y="76" fill="#8a5a1f" font-size="10">  (via redirect)</text>
+    </g>
+
+    <!-- Box 4: Score + extract sections -->
+    <g transform="translate(740, 100)">
+      <rect width="200" height="90" fill="none" stroke="#ffb347" stroke-width="1.5"/>
+      <text x="14" y="22" fill="#5a3a14" font-size="10">[stage 3] heuristic</text>
+      <text x="14" y="44" fill="#ffcc66" font-weight="bold">score + slice</text>
+      <text x="14" y="62" fill="#8a5a1f" font-size="10">drop weak hits;</text>
+      <text x="14" y="76" fill="#8a5a1f" font-size="10">find dense sections</text>
+    </g>
+
+    <!-- Box 5: LLM final answer -->
+    <g transform="translate(980, 100)">
+      <rect width="220" height="90" fill="none" stroke="#ffb347" stroke-width="1.5"/>
+      <text x="14" y="22" fill="#5a3a14" font-size="10">[stage 4] llm pass #2</text>
+      <text x="14" y="44" fill="#ffcc66" font-weight="bold">cited answer</text>
+      <text x="14" y="62" fill="#8a5a1f" font-size="10">strict source</text>
+      <text x="14" y="76" fill="#8a5a1f" font-size="10">grounding rules</text>
+    </g>
+
+    <!-- Arrows between boxes -->
+    <line x1="222" y1="145" x2="258" y2="145" stroke="#ffb347" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="462" y1="145" x2="498" y2="145" stroke="#ffb347" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="702" y1="145" x2="738" y2="145" stroke="#ffb347" stroke-width="2" marker-end="url(#arrow)"/>
+    <line x1="942" y1="145" x2="978" y2="145" stroke="#ffb347" stroke-width="2" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- Lower row: side-effect boxes / data sources -->
+  <g font-size="11">
+    <!-- Local zims feeding stage 2 -->
+    <g transform="translate(490, 230)">
+      <rect width="220" height="80" fill="none" stroke="#3a2400" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="14" y="22" fill="#5a3a14" font-size="10">[disk]</text>
+      <text x="14" y="44" fill="#ffb347" font-weight="bold">offline ZIMs</text>
+      <text x="14" y="62" fill="#8a5a1f" font-size="10">wikipedia (115gb), gutenberg,</text>
+      <text x="14" y="76" fill="#8a5a1f" font-size="10">stack exchange, khan, etc</text>
+    </g>
+    <line x1="600" y1="230" x2="600" y2="195" stroke="#5a3a14" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-dim)"/>
+
+    <!-- Llamafile feeding stage 1 + stage 4 -->
+    <g transform="translate(740, 230)">
+      <rect width="220" height="80" fill="none" stroke="#3a2400" stroke-width="1" stroke-dasharray="3,3"/>
+      <text x="14" y="22" fill="#5a3a14" font-size="10">[localhost:8081]</text>
+      <text x="14" y="44" fill="#ffb347" font-weight="bold">llamafile</text>
+      <text x="14" y="62" fill="#8a5a1f" font-size="10">llama 3.2 3B Q6  /</text>
+      <text x="14" y="76" fill="#8a5a1f" font-size="10">llama 3.1 8B Q4 (auto)</text>
+    </g>
+    <line x1="850" y1="230" x2="850" y2="195" stroke="#5a3a14" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-dim)"/>
+    <line x1="780" y1="230" x2="380" y2="195" stroke="#5a3a14" stroke-width="1.5" stroke-dasharray="3,3" marker-end="url(#arrow-dim)"/>
+  </g>
+
+  <!-- Footer time annotation -->
+  <text x="640" y="355" fill="#5a3a14" font-size="11" text-anchor="middle">total round-trip: 20-40s on a recent mac · 100% local · 0 packets to the internet</text>
+</svg>
