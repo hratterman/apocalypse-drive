@@ -171,7 +171,12 @@ if sys.platform == 'darwin':
             'CFBundleShortVersionString': '1.0.0',
             'CFBundleVersion': '1.0.0',
             'NSHighResolutionCapable': True,
-            'LSUIElement': True,    # Menu-bar app, no Dock icon
+            # LSUIElement: True makes the app menu-bar-only — no Dock icon,
+            # no Cmd+Tab entry, no Force Quit menu entry. Sounds clean, but
+            # if the menu-bar icon ever fails to render (which has bitten us
+            # on a fresh MacBook in v1.3.3), the app becomes unreachable
+            # without Activity Monitor. Keep the app accessible.
+            'LSUIElement': False,
             'LSMinimumSystemVersion': '10.13',
             'NSHumanReadableCopyright': 'MIT License · github.com/hratterman/apocalypse-drive',
             'NSAppTransportSecurity': {

@@ -153,12 +153,40 @@ def _entry(path: Path, label: str, kind: str) -> dict:
     apoc_dir = p / 'apocalypse'
     has_existing = (apoc_dir / 'state.json').exists() or (apoc_dir / 'kiwix' / 'zim').exists()
 
-    # Drive is "writable" if either the root or an existing apocalypse subdir
-    # accepts a probe file. Some external drives (especially exFAT mounted
-    # by macOS) refuse writes at root but allow them inside subfolders.
-    writable = _writable(p)
-    if not writable and apoc_dir.exists():
+    # Decide writability. We try, in order:
+    #   1. The apocalypse subdir if it already exists (most accurate test).
+    #   2. The root mount point.
+    #   3. Whether we can CREATE the apocalypse subdir from scratch.
+    # Step 3 catches the common fresh-USB case where the root rejects writes
+    # but creating a new directory works (some macOS exFAT mounts behave
+    # this way under fskit). Without step 3, fresh exFAT sticks were being
+    # silently marked read-only and the user couldn't pick them.
+    writable = False
+    if apoc_dir.exists():
         writable = _writable(apoc_dir)
+    if not writable:
+        writable = _writable(p)
+    if not writable and p.exists() and p.is_dir() and not apoc_dir.exists():
+        # Try creating the apocalypse subdir as a final probe. We only do
+        # this when it doesn't exist — we don't want to leave litter.
+        try:
+            import threading
+            res = [False]
+            def _try_mkdir():
+                try:
+                    apoc_dir.mkdir(parents=False, exist_ok=False)
+                    # If we can mkdir, we can write. Clean up.
+                    apoc_dir.rmdir()
+                    res[0] = True
+                except Exception:
+                    pass
+            t = threading.Thread(target=_try_mkdir, daemon=True)
+            t.start()
+            t.join(timeout=2.0)
+            if not t.is_alive():
+                writable = res[0]
+        except Exception:
+            pass
 
     return {
         'path': str(p),

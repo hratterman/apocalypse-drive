@@ -754,10 +754,33 @@ if _USE_RUMPS:
                 c: write_icon_png(c, icon_dir)
                 for c in ('gray', 'green', 'yellow', 'red', 'orange')
             }
+            # Verify the icon file is reachable and well-formed BEFORE handing
+            # it to rumps. _nsimage_from_file inside rumps just calls
+            # NSImage.initByReferencingFile_ which silently returns nil on
+            # bad input, leaving an empty menu-bar slot with no error.
+            initial_icon = self._icon_paths['yellow']
+            try:
+                with open(initial_icon, 'rb') as fp:
+                    head = fp.read(8)
+                if not head.startswith(b'\x89PNG'):
+                    _llog(f"WARN: icon file at {initial_icon} is not a valid PNG: head={head!r}")
+                    initial_icon = None
+                else:
+                    _llog(f"icon ok: {initial_icon}")
+            except OSError as e:
+                _llog(f"WARN: cannot read icon file {initial_icon}: {e}")
+                initial_icon = None
+
+            # Always pass a non-empty title even when the icon loads. If the
+            # icon ever fails to render (Cocoa silently drops bad NSImage),
+            # the title text guarantees the menu-bar slot is visible. Without
+            # this, the user sees NOTHING in the menu bar and assumes the app
+            # didn't launch — which is exactly what happened on Henry's
+            # MacBook with v1.3.3.
             super().__init__(
                 'Apocalypse',
-                title=None,
-                icon=self._icon_paths['yellow'],
+                title='⚪︎',          # always-visible fallback
+                icon=initial_icon,
                 template=False,         # full-color icon, not B&W template
                 quit_button=None,       # we install our own Quit
             )
@@ -809,16 +832,24 @@ if _USE_RUMPS:
         def _tick(self, _sender):
             try:
                 health = self.core.shim.health()
-                color_map = {
-                    'down': 'red',
-                    'starting': 'yellow',
-                    'ready': 'green',
-                    'downloading': 'orange',
+                # Map each health state to (color, glyph). The glyph stays
+                # visible even if the icon image fails to render (rumps'
+                # NSImage falls back to empty when the path is bad — see
+                # icon-validation in __init__).
+                state_map = {
+                    'down':         ('red',    '✕'),
+                    'starting':     ('yellow', '⚪︎'),
+                    'ready':        ('green',  '●'),
+                    'downloading':  ('orange', '↓'),
                 }
-                desired = color_map.get(health, 'gray')
+                color, glyph = state_map.get(health, ('gray', '⚪︎'))
                 if health != self.core.last_health:
                     self.core.last_health = health
-                    self.icon = self._icon_paths[desired]
+                    try:
+                        self.icon = self._icon_paths[color]
+                    except Exception as e:
+                        _llog(f"icon swap failed: {e}")
+                    self.title = glyph
                     self._build_menu()
 
                 # First-run auto-open of the wizard
@@ -888,8 +919,19 @@ if __name__ == '__main__':
         import traceback
         _llog(f"FATAL: {type(e).__name__}: {e}")
         _llog(traceback.format_exc())
-        # Re-raise only if we still have stdio (running from terminal). When
-        # launched as a bundled .app there's no stdout, but raising would
-        # cause Python's default handler to abort with no user feedback. The
-        # log file is the user feedback.
-        raise
+        # When launched from a terminal (running from source), re-raise so
+        # the dev sees the traceback. When launched as a bundled .app there's
+        # no stdout, raising would just abort with no user feedback. The log
+        # file is the user feedback. Best-effort cleanup of the shim and
+        # llama subprocesses so they don't outlive the parent and squat on
+        # ports forever.
+        try:
+            if app is not None:
+                app.shim.stop()
+                app.llama.stop()
+        except Exception:
+            pass
+        if not hasattr(sys, '_MEIPASS'):
+            raise
+        # Bundled .app: exit cleanly so launchd/Finder don't show a crash dialog
+        sys.exit(1)

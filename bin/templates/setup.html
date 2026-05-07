@@ -550,14 +550,19 @@ async function loadDrives() {
   list.innerHTML = '';
   for (const d of drives) {
     const card = document.createElement('div');
-    card.className = 'drive-card' + (d.writable ? '' : ' disabled');
+    // We previously refused clicks on cards we couldn't verify writable.
+    // That hard-blocked users from picking fresh exFAT USB sticks where
+    // the writability probe is fragile. Now: always clickable, but show a
+    // warning tag when uncertain — backend will surface a real error if
+    // the install actually fails.
+    card.className = 'drive-card';
     card.dataset.path = d.apocalypse_dir;
     const tags = [];
     if (d.type === 'external') tags.push(`<span class="drive-tag">${d.filesystem}</span>`);
     if (d.portable) tags.push(`<span class="drive-tag portable">cross-OS portable</span>`);
     else if (d.type === 'external' && d.filesystem !== 'unknown') tags.push(`<span class="drive-tag warn">${d.filesystem} (one-OS)</span>`);
     if (d.has_existing) tags.push(`<span class="drive-tag essential">existing install</span>`);
-    if (!d.writable) tags.push(`<span class="drive-tag warn">read-only</span>`);
+    if (!d.writable) tags.push(`<span class="drive-tag warn">may be read-only</span>`);
 
     card.innerHTML = `
       <div class="drive-icon">${driveIcon(d)}</div>
@@ -571,9 +576,7 @@ async function loadDrives() {
         <div class="total">free of ${fmtBytes(d.total)}</div>
       </div>
     `;
-    if (d.writable) {
-      card.addEventListener('click', () => selectDrive(d.apocalypse_dir, card));
-    }
+    card.addEventListener('click', () => selectDrive(d.apocalypse_dir, card));
     list.appendChild(card);
   }
 }
