@@ -23,6 +23,7 @@
 
 <p align="center">
   <a href="#install-the-easy-way">Install</a> ·
+  <a href="#make-a-fully-portable-drive">Portable drive</a> ·
   <a href="#whats-on-the-drive">What's on the drive</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#themes">Themes</a> ·
@@ -49,15 +50,123 @@ The installer is small. ZIM files (Wikipedia and friends) are downloaded on dema
 
 ### Use it as a portable drive (any OS, no internet)
 
-The `apocalypse-drive.zip` bundle contains the macOS, Windows, and Linux launchers in one archive. Workflow:
+The `apocalypse-drive.zip` bundle ships with launchers for all three OSes. Format a USB stick or SD card as exFAT, unzip the bundle to the drive root, double-click the launcher for whichever OS you're on, and pick the drive (not your home folder) in the wizard's Step 1 picker. Done. The same drive then works on a Mac at home, a friend's PC, a Linux laptop on a plane.
 
-1. Format a USB drive as **exFAT** (works on macOS + Windows + Linux out of the box).
-2. Unzip `apocalypse-drive.zip` to the drive root.
-3. On any computer, open the matching OS subfolder and run that launcher. The same drive works on a Mac at home, a friend's PC, a Linux laptop on a plane.
-
-The first run wizard now has a Step 1 drive picker. Point it at the `apocalypse/` folder on the USB drive (or anywhere else), and ZIMs and the local LLM all land there. No internet needed at runtime once the drive is populated.
+For the full walkthrough including hardware recommendations, format commands per OS, and troubleshooting, see [**Make a fully portable drive**](#make-a-fully-portable-drive) below.
 
 If you don't want our app at all, you can still read every ZIM with any [Kiwix reader](https://kiwix.org). The data on the drive is open format.
+
+---
+
+## Make a fully portable drive
+
+A fully portable drive is one you can pull out of any computer, plug into a different OS, and keep working with zero changes to either machine. The drive carries the launchers, the data, the LLM, and the config. Nothing leaks back to the host.
+
+This is different from the **regular install** above, where the .app sits in `/Applications` (or `Program Files`) and your data lives in your home folder. Both work, but only the portable layout survives unplugging.
+
+### What you'll need
+
+| Use case | Storage | Card / drive type |
+|---|---|---|
+| Survival pack only (~64 GB ZIMs + 3 GB LLM) | **128 GB** minimum | UHS-I V30+ SD card or any USB 3 stick |
+| Student / Developer pack (~250 GB) | **256 GB** | USB 3 SSD recommended, V60 SD acceptable |
+| Everything pack (~1 TB) | **1 TB+** | USB 3 SSD strongly recommended |
+
+ZIMs are read by random access. SSDs and SD cards both work, but a slow USB 2 stick will make Wikipedia feel like 2008 dial-up. USB 3 + UHS-I V30 or better is the sweet spot for cost vs. speed.
+
+### Format the drive
+
+Format as **exFAT**. This is the only filesystem all three OSes can read AND write to without third-party drivers.
+
+- **macOS**: Disk Utility → select drive → Erase → Format: ExFAT, Scheme: Master Boot Record. Name it something simple like `APOCALYPSE`.
+- **Windows**: File Explorer → right-click drive → Format → File system: exFAT, Allocation unit size: 128 KB (faster on big files), Quick Format on. Click Start.
+- **Linux**: `sudo mkfs.exfat -n APOCALYPSE /dev/sdX1` (replace `/dev/sdX1` with the real device, **double-check** with `lsblk` first).
+
+> SD card with a tiny lock switch on the side? Make sure it's **unlocked**. The slider physically forces the card read-only and macOS will mount it as read-only with no warning. The wizard now detects this and tells you, but it's worth checking up front.
+
+### Lay the drive out
+
+1. Download `apocalypse-drive.zip` from the [latest release](https://github.com/hratterman/apocalypse-drive/releases/latest).
+2. Unzip it to the **drive root**. After unzipping, your drive looks like:
+
+```
+APOCALYPSE/
+├── Apocalypse.html          ← static fallback (open in any browser, no app needed)
+├── README.txt               ← short version of these instructions
+├── macos/
+│   └── Apocalypse.dmg       ← double-click to mount, drag .app to drive root
+├── windows/
+│   └── Apocalypse-Setup.exe ← run, install to a folder on the drive
+├── linux/
+│   └── Apocalypse.tar.gz    ← extract to drive root, run ./Apocalypse/Apocalypse
+└── apocalypse/              ← runtime data (filled by the wizard on first run)
+    ├── kiwix/zim/           ← your downloaded ZIMs land here
+    ├── llm/                 ← optional local LLM
+    └── logs/                ← diagnostics
+```
+
+The contract is: **everything you need is somewhere on the drive, nothing extra goes to the host.**
+
+### First launch (one OS, doesn't matter which)
+
+Plug the drive into one computer. Pick any OS. The drive will work on all three regardless of which one you set it up from first.
+
+**macOS:**
+1. Open the `macos/` folder on the drive.
+2. Double-click `Apocalypse.dmg`. A new Finder window mounts.
+3. Drag `Apocalypse.app` from the DMG to the **drive root** (alongside `README.txt`). Do NOT drag it to `/Applications`.
+4. Eject the DMG.
+5. Double-click the .app you just dragged. First run hits Gatekeeper: right-click → Open → confirm.
+
+**Windows:**
+1. Open the `windows/` folder.
+2. Run `Apocalypse-Setup.exe`. SmartScreen will warn (unsigned binary), choose "More info" → "Run anyway".
+3. **When the installer asks where to install, point it at the drive root**, e.g. `D:\Apocalypse`. NOT `Program Files`. This is the step that determines whether your install is portable or not.
+
+**Linux:**
+1. Open the `linux/` folder.
+2. Extract the archive to the drive root: `cd /media/<you>/APOCALYPSE && tar xzf linux/Apocalypse.tar.gz`.
+3. Run it: `./Apocalypse/Apocalypse`.
+
+In all three cases, the wizard opens at `localhost:8888`.
+
+### Wizard: pick the DRIVE, not your home folder
+
+This is the step that makes the difference between "portable" and "stuck on this computer."
+
+In the **Step 1 drive picker**, you'll see your home folder, the boot disk, and any external drives. Click the row that points to the **USB drive's `apocalypse/` folder**. It'll have a green "cross-OS portable" badge if the filesystem is exFAT.
+
+After that the wizard works the same as a regular install: pick a starter pack or à-la-carte ZIMs, pick a local LLM (or skip it), click Start Download, walk away. Everything lands on the drive.
+
+> If you forget and pick "Home folder", your install is no longer portable. To recover: quit the app, copy `~/Apocalypse` to `<drive>/apocalypse`, delete `~/Apocalypse`, relaunch the app FROM the drive.
+
+### Verify it's actually portable
+
+After the first machine finishes downloading, do this sanity check:
+
+1. Quit the app from the menu bar / system tray.
+2. Eject the drive properly.
+3. Plug the same drive into a different computer (different OS is fine).
+4. Run the launcher for THAT OS from the drive.
+5. Open `localhost:8888`. Your library should be there with every ZIM you downloaded, every theme preference, every LLM choice. No re-downloading, no re-setup.
+
+If something didn't transfer, the most likely cause is a stale `state.json` on the host. See [Troubleshooting](#troubleshooting) below.
+
+### Troubleshooting
+
+**SD card mounts read-only on macOS** → check the physical lock switch on the card or its adapter. If unlocked and still read-only, run Disk Utility → First Aid. If First Aid fails, back up your data and reformat as exFAT. The wizard's Step 1 will surface a red "read-only mount" tag and a one-click help block when this happens.
+
+**Drive shows up but says "may be read-only"** → soft warning. Click it anyway. The probe is conservative and many fresh exFAT sticks pass on the first real write.
+
+**Windows installer wants `C:\`** → in the installer's "Choose Install Location" step, click Browse and pick a folder on the USB drive instead, e.g. `D:\Apocalypse`. The installer is just a wrapper around the .exe; the choice of install location is what makes the difference.
+
+**Antivirus flags the .exe as suspicious** → it's unsigned (we don't pay Microsoft for a code-signing cert). Add an exception or download the source and build it yourself with `pyinstaller apocalypse.spec`.
+
+**App opens but no menu bar icon** → starting in v1.3.4 the menu bar slot has a glyph fallback (`●` ready, `⚪︎` starting, `↓` downloading, `✕` down) that survives even if Cocoa rejects the icon image. If you don't see EITHER an icon OR a glyph, check `~/.apocalypse_launch.log` and `~/.apocalypse_shim_launch.log` and open an issue with the contents.
+
+**A download errors out at 94%** → from v1.3.6 the wizard's downloads page has per-row Retry / Cancel / Remove buttons. Retry resumes from the existing partial via HTTP Range, so a Wikipedia stuck at 94% picks up at 94%, not zero.
+
+---
 
 ### What you'll see
 
