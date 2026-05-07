@@ -708,6 +708,12 @@ class ApocalypseApp:
                     if not self.shim.setup_complete():
                         # Auto-open the wizard on first run
                         webbrowser.open(self.url('/setup'))
+
+                # Self-heal LLM: if a llamafile appears on disk later (e.g.
+                # downloaded via wizard after boot), start it. Idempotent
+                # via is_running() short-circuit.
+                if not self.llama.is_running() and self.llama.find_model():
+                    threading.Thread(target=self.llama.start, daemon=True).start()
             except Exception:
                 pass
             time.sleep(5.0)
@@ -860,6 +866,15 @@ if _USE_RUMPS:
                     else:
                         # Already set up — open main page so user lands somewhere useful
                         webbrowser.open(self.core.url('/'))
+
+                # Self-heal LLM: if a llamafile is on disk but the process
+                # isn't running, start it. Covers the common case where the
+                # user downloaded the model AFTER app boot via the wizard;
+                # the initial llama.start() at __main__ ran with no model
+                # present and exited cleanly. This re-checks every tick and
+                # is idempotent (is_running() short-circuits when alive).
+                if not self.core.llama.is_running() and self.core.llama.find_model():
+                    threading.Thread(target=self.core.llama.start, daemon=True).start()
             except Exception as e:
                 _llog(f"tick error: {type(e).__name__}: {e}")
 
