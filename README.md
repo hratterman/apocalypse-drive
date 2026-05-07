@@ -33,18 +33,31 @@
 
 ## Install (the easy way)
 
-Download the installer for your OS, double-click, walk through the setup wizard. The wizard runs in your browser at `localhost:8888` and stays out of your way after.
+Download for your OS, double-click, walk through the setup wizard. The wizard runs in your browser at `localhost:8888` and stays out of your way after.
 
 | OS | Download | Size |
 |---|---|---|
+| **All-in-one (portable)** | [apocalypse-drive.zip](https://github.com/hratterman/apocalypse-drive/releases/latest) | ~150 MB |
 | **macOS** (Apple Silicon + Intel) | [Apocalypse-macOS.dmg](https://github.com/hratterman/apocalypse-drive/releases/latest) | ~50 MB |
 | **Windows 10/11** | [Apocalypse-Windows-Setup.exe](https://github.com/hratterman/apocalypse-drive/releases/latest) | ~50 MB |
 | **Linux x86_64** | [Apocalypse-Linux-x86_64.tar.gz](https://github.com/hratterman/apocalypse-drive/releases/latest) | ~50 MB |
 
-The installer is small. The actual ZIM files (Wikipedia and friends) are downloaded on demand by the setup wizard, so you only get what you ask for.
+The installer is small. ZIM files (Wikipedia and friends) are downloaded on demand by the setup wizard, so you only get what you ask for.
 
 > **First launch on macOS** hits Gatekeeper because the app isn't code-signed. Right-click `Apocalypse.app`, choose Open, confirm. Once.<br/>
 > **First launch on Windows** may flash SmartScreen. Click "More info" then "Run anyway". Once.
+
+### Use it as a portable drive (any OS, no internet)
+
+The `apocalypse-drive.zip` bundle contains the macOS, Windows, and Linux launchers in one archive. Workflow:
+
+1. Format a USB drive as **exFAT** (works on macOS + Windows + Linux out of the box).
+2. Unzip `apocalypse-drive.zip` to the drive root.
+3. On any computer, open the matching OS subfolder and run that launcher. The same drive works on a Mac at home, a friend's PC, a Linux laptop on a plane.
+
+The first run wizard now has a Step 1 drive picker. Point it at the `apocalypse/` folder on the USB drive (or anywhere else), and ZIMs and the local LLM all land there. No internet needed at runtime once the drive is populated.
+
+If you don't want our app at all, you can still read every ZIM with any [Kiwix reader](https://kiwix.org). The data on the drive is open format.
 
 ### What you'll see
 

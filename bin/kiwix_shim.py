@@ -1135,7 +1135,11 @@ def main():
                 def restart_hook():
                     global ARCHIVES
                     ARCHIVES = load_archives(ZIM_DIR)
-                setup_routes.init(install_dir, catalog_path, restart_hook=restart_hook)
+                def relocate_hook(new_zim_dir):
+                    global ZIM_DIR, ARCHIVES
+                    ZIM_DIR = new_zim_dir
+                    ARCHIVES = load_archives(ZIM_DIR)
+                setup_routes.init(install_dir, catalog_path, restart_hook=restart_hook, relocate_hook=relocate_hook)
                 print(f"Setup routes enabled (install_dir={install_dir})")
                 print(f"  Wizard: http://{args.host}:{args.port}/setup")
                 print(f"  Admin:  http://{args.host}:{args.port}/admin")

@@ -190,8 +190,121 @@ jobs:
           name: apocalypse-linux
           path: release/Apocalypse-Linux-x86_64.tar.gz
 
-  release:
+  bundle-portable:
     needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Show what we got
+        run: find artifacts -type f -maxdepth 4 | sort
+
+      - name: Stage portable bundle
+        run: |
+          set -euo pipefail
+          mkdir -p portable/apocalypse-drive
+
+          # Each OS launcher gets its own subfolder. Users grab whichever
+          # matches their machine and run it from the drive.
+          mkdir -p portable/apocalypse-drive/macos
+          mkdir -p portable/apocalypse-drive/windows
+          mkdir -p portable/apocalypse-drive/linux
+
+          cp artifacts/apocalypse-macos/Apocalypse-macOS.dmg \
+             portable/apocalypse-drive/macos/Apocalypse.dmg
+          cp artifacts/apocalypse-windows/Apocalypse-Windows-Setup.exe \
+             portable/apocalypse-drive/windows/Apocalypse-Setup.exe
+          cp artifacts/apocalypse-linux/Apocalypse-Linux-x86_64.tar.gz \
+             portable/apocalypse-drive/linux/Apocalypse.tar.gz
+
+          # Pre-create the runtime layout so the user can drop the unzipped
+          # folder onto an exFAT drive and have everything sit at the root.
+          mkdir -p portable/apocalypse-drive/apocalypse/kiwix/zim
+          mkdir -p portable/apocalypse-drive/apocalypse/llm
+          mkdir -p portable/apocalypse-drive/apocalypse/logs
+
+          # Ship Apocalypse.html at the root so users can open it directly
+          # in any browser, on any OS, with no app at all (degraded mode:
+          # search/browse via plain Kiwix readers, no RAG/LLM).
+          cp Apocalypse.html portable/apocalypse-drive/Apocalypse.html
+
+          # README explaining how to launch on each OS
+          cat > portable/apocalypse-drive/README.txt <<'EOF'
+          APOCALYPSE DRIVE
+          ================
+
+          A self-contained offline knowledge library. Drop this folder onto
+          any exFAT-formatted drive and read it from any computer with no
+          internet.
+
+          HOW TO USE
+          ----------
+
+          macOS:
+            1. Open the macos/ folder
+            2. Double-click Apocalypse.dmg
+            3. Drag Apocalypse.app to the drive root (next to this README)
+            4. Run it from there
+
+          Windows:
+            1. Open the windows/ folder
+            2. Run Apocalypse-Setup.exe
+            3. When prompted, install to the drive root
+
+          Linux:
+            1. Open the linux/ folder
+            2. tar xzf Apocalypse.tar.gz to the drive root
+            3. ./Apocalypse/Apocalypse
+
+          NO APP, JUST THE DATA
+          ---------------------
+
+          You can open Apocalypse.html in any browser to read the landing
+          page. To browse ZIMs without our app, install any Kiwix reader
+          (kiwix.org) and point it at apocalypse/kiwix/zim/.
+
+          The ZIM format is open and works with kiwix-android, kiwix-desktop,
+          kiwix-tools, and any libzim-based reader.
+
+          DRIVE LAYOUT
+          ------------
+
+          apocalypse-drive/
+            Apocalypse.html        Static landing page, opens in any browser
+            README.txt             This file
+            macos/                 macOS launcher
+            windows/               Windows launcher
+            linux/                 Linux launcher
+            apocalypse/            Runtime data (created on first run)
+              kiwix/zim/           Your downloaded ZIMs
+              llm/                 Optional local LLM (.llamafile)
+              logs/                Diagnostics
+
+          See the GitHub repo for full docs.
+          EOF
+
+          ls -la portable/apocalypse-drive/
+
+      - name: Zip portable bundle
+        run: |
+          mkdir -p release
+          cd portable
+          zip -r ../release/apocalypse-drive.zip apocalypse-drive
+          cd ..
+          ls -la release/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apocalypse-portable
+          path: release/apocalypse-drive.zip
+
+  release:
+    needs: [build-macos, build-windows, build-linux, bundle-portable]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release_tag != ''
     steps:
@@ -224,23 +337,26 @@ jobs:
             Self-contained offline knowledge library with built-in RAG.
 
             ### Downloads
-            - **macOS**: `Apocalypse-macOS.dmg` (Intel + Apple Silicon)
-            - **Windows**: `Apocalypse-Windows-Setup.exe`
-            - **Linux**: `Apocalypse-Linux-x86_64.tar.gz`
+            - **All-in-one (recommended for portable drives)**: `apocalypse-drive.zip` contains all three OS launchers plus the runtime layout. Drop on any exFAT drive, run it from any computer.
+            - **macOS only**: `Apocalypse-macOS.dmg` (Intel + Apple Silicon)
+            - **Windows only**: `Apocalypse-Windows-Setup.exe`
+            - **Linux only**: `Apocalypse-Linux-x86_64.tar.gz`
 
             ### First run
-            Open the app. The setup wizard pops up in your browser. Pick a starter pack (Survival, Student, Developer) or choose individual ZIMs. Downloads stream in the background. When it's done you have an offline copy of Wikipedia, Khan Academy, Stack Overflow, and more.
+            Open the app. The setup wizard pops up in your browser. Step 1 picks the drive (internal or external). Step 2 picks a starter pack. Step 3 picks individual ZIMs. Step 4 downloads. When it finishes you have an offline copy of Wikipedia, Khan Academy, Stack Overflow, and more, plus an optional local LLM that grounds answers in those ZIMs.
 
             ### Notes
-            - macOS: first launch hits Gatekeeper ("unidentified developer"). Right-click the app, choose Open, confirm. Once.
-            - Windows: SmartScreen may flash a warning. Click "More info" then "Run anyway".
+            - macOS: first launch hits Gatekeeper. Right-click the app, choose Open, confirm. Once.
+            - Windows: SmartScreen may warn. Click "More info" then "Run anyway".
             - Linux: untar and run `./Apocalypse/Apocalypse`.
+            - Cross-OS portability: format the destination drive exFAT, drop the unzipped folder onto its root, and the same drive works on macOS, Windows, and Linux machines.
 
             See README for full docs.
           files: |
             release/apocalypse-macos/Apocalypse-macOS.dmg
             release/apocalypse-windows/Apocalypse-Windows-Setup.exe
             release/apocalypse-linux/Apocalypse-Linux-x86_64.tar.gz
+            release/apocalypse-portable/apocalypse-drive.zip
           draft: false
           prerelease: false
         env:

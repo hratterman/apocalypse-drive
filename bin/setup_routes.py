@@ -53,6 +53,7 @@ _HYDRATION_LOCK = threading.Lock()
 _DOWNLOADS = {}            # id -> Download object
 _DOWNLOADS_LOCK = threading.Lock()
 _SHIM_RESTART_HOOK = None  # callable: triggers shim to reload ZIMs
+_ZIM_DIR_RELOCATE_HOOK = None  # callable(new_zim_dir): updates kiwix_shim.ZIM_DIR + ARCHIVES
 _RELOAD_TIMER = None       # debounce timer for shim reloads
 _RELOAD_LOCK = threading.Lock()
 
@@ -78,11 +79,12 @@ def _schedule_shim_reload(delay=2.0):
         _RELOAD_TIMER.start()
 
 
-def init(install_dir, catalog_path, restart_hook=None):
+def init(install_dir, catalog_path, restart_hook=None, relocate_hook=None):
     """Call once at shim startup."""
-    global _INSTALL_DIR, _CATALOG, _SHIM_RESTART_HOOK
+    global _INSTALL_DIR, _CATALOG, _SHIM_RESTART_HOOK, _ZIM_DIR_RELOCATE_HOOK
     _INSTALL_DIR = Path(install_dir).resolve()
     _SHIM_RESTART_HOOK = restart_hook
+    _ZIM_DIR_RELOCATE_HOOK = relocate_hook
     with open(catalog_path) as f:
         _CATALOG = json.load(f)
     # Ensure dirs exist
@@ -93,6 +95,30 @@ def init(install_dir, catalog_path, restart_hook=None):
     # Kick off background hydration so first wizard request is fast
     if kiwix_opds is not None:
         threading.Thread(target=_hydrate_in_background, daemon=True).start()
+
+
+def relocate_install_dir(new_path):
+    """Move the install_dir target to a new path without restarting the process.
+
+    Safe only when no downloads are in flight and no ZIMs have been installed
+    yet. The caller (HTTP handler) is responsible for that gate. Updates
+    _INSTALL_DIR, recreates the standard subdirs at the new location, and
+    notifies the shim's ZIM_DIR via the relocate hook so subsequent search /
+    download writes land at the new place.
+    """
+    global _INSTALL_DIR
+    new_path = Path(new_path).expanduser().resolve()
+    new_path.mkdir(parents=True, exist_ok=True)
+    new_zim = new_path / 'kiwix' / 'zim'
+    new_zim.mkdir(parents=True, exist_ok=True)
+    (new_path / 'llm').mkdir(parents=True, exist_ok=True)
+    (new_path / 'logs').mkdir(parents=True, exist_ok=True)
+    _INSTALL_DIR = new_path
+    if _ZIM_DIR_RELOCATE_HOOK:
+        try:
+            _ZIM_DIR_RELOCATE_HOOK(str(new_zim))
+        except Exception:
+            pass
 
 
 def _hydrate_in_background():
@@ -559,7 +585,7 @@ def dispatch_get(path, qs):
             'theme': st.get('theme', 'terminal'),
             'model': st.get('model', '3b'),
             'disk': disk_for(_INSTALL_DIR),
-            'version': '1.2.2',
+            'version': '1.3.0',
             'author': 'Henry Ratterman',
             'author_url': 'https://henryratterman.com',
         })
@@ -634,14 +660,24 @@ def dispatch_post(path, body):
             _SHIM_RESTART_HOOK()
         return _json_response({'ok': True})
     if path == '/api/install-dir':
-        # Set/relocate the install directory. Validates writability and
-        # available space, persists choice via .apocalypse_install file in
-        # the user's home, then triggers a shim restart pointing at the new
-        # path. The frontend should poll /api/status until the server comes
-        # back, then continue the wizard.
+        # Set/relocate the install directory. Used by the wizard's drive
+        # picker on first run.
+        #
+        # Constraints: this is safe ONLY when nothing has been downloaded
+        # yet (no ZIMs, setup not complete). For an established install,
+        # moving the location requires a manual data copy + restart and is
+        # not handled here.
         new_path = (body.get('path') or '').strip()
         if not new_path:
             return _json_response({'ok': False, 'error': 'No path provided'})
+        # Refuse to relocate if we already have ZIMs at the current location.
+        # The user should finish their existing install or wipe state.json first.
+        st = load_state()
+        if st.get('setup_complete') or installed_ids():
+            return _json_response({
+                'ok': False,
+                'error': 'Cannot relocate after setup. Move the apocalypse folder manually and restart.',
+            })
         try:
             from drives import validate_install_path
             ok, reason, info = validate_install_path(new_path)
@@ -655,14 +691,15 @@ def dispatch_post(path, body):
             pointer.write_text(str(Path(new_path).resolve()), encoding='utf-8')
         except Exception as e:
             return _json_response({'ok': False, 'error': f'Cannot save pointer: {e}'})
-        # Trigger restart; the tray will reread the pointer and re-init at
-        # the new path. We respond before the shim shuts down.
-        if _SHIM_RESTART_HOOK:
-            import threading as _th
-            _th.Timer(0.3, _SHIM_RESTART_HOOK).start()
+        # In-process relocate so the running wizard can keep going without
+        # needing a real restart. Updates _INSTALL_DIR + ZIM_DIR + ARCHIVES.
+        try:
+            relocate_install_dir(new_path)
+        except Exception as e:
+            return _json_response({'ok': False, 'error': f'Relocate failed: {e}'})
         return _json_response({
             'ok': True, 'path': str(Path(new_path).resolve()),
-            'restart': True,
+            'disk': disk_for(_INSTALL_DIR),
         })
     if path == '/api/config':
         st = load_state()

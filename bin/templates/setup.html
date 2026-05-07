@@ -262,6 +262,88 @@
   .signature a { color: var(--muted); text-decoration: none; transition: color 0.15s; }
   .signature a:hover { color: var(--accent); }
   .signature .dot { margin: 0 8px; opacity: 0.5; }
+  /* ---- Drive picker (Step 0) ---- */
+  .drives-list {
+    display: flex; flex-direction: column; gap: 10px;
+    margin: 20px 0 24px;
+  }
+  .drive-loading {
+    color: var(--muted); padding: 16px; border: 1px dashed var(--border);
+    border-radius: 8px; text-align: center;
+  }
+  .drive-card {
+    border: 1px solid var(--border); background: var(--panel);
+    border-radius: 10px; padding: 16px 18px;
+    display: flex; align-items: center; gap: 16px;
+    cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  }
+  .drive-card:hover {
+    border-color: var(--accent-dim); background: var(--panel-2);
+  }
+  .drive-card.selected {
+    border-color: var(--accent); background: var(--panel-2);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .drive-card.disabled {
+    opacity: 0.5; cursor: not-allowed;
+  }
+  .drive-icon {
+    flex-shrink: 0; width: 40px; height: 40px; border-radius: 8px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--accent); font-size: 20px;
+  }
+  .drive-info { flex: 1; min-width: 0; }
+  .drive-info .name {
+    font-weight: 600; font-size: 15px; color: var(--text);
+    margin-bottom: 4px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap;
+  }
+  .drive-info .path {
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 12px; color: var(--muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .drive-info .tags {
+    margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap;
+  }
+  .drive-tag {
+    background: var(--panel); border: 1px solid var(--border);
+    color: var(--muted); font-size: 11px; padding: 2px 8px;
+    border-radius: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .drive-tag.portable { color: var(--good); border-color: var(--good); }
+  .drive-tag.warn { color: var(--warn); border-color: var(--warn); }
+  .drive-tag.essential { color: var(--accent); border-color: var(--accent); }
+  .drive-space {
+    flex-shrink: 0; text-align: right; font-size: 13px;
+  }
+  .drive-space .free { color: var(--good); font-weight: 600; font-size: 16px; }
+  .drive-space .total { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .drive-warn {
+    color: var(--warn); font-size: 12px; margin-top: 6px;
+  }
+
+  .custom-path {
+    margin-top: 8px; padding: 16px 18px;
+    border: 1px dashed var(--border); border-radius: 8px;
+  }
+  .custom-path label {
+    color: var(--muted); font-size: 13px; display: block; margin-bottom: 8px;
+  }
+  .custom-path-row { display: flex; gap: 8px; }
+  .custom-path-row input {
+    flex: 1; background: var(--bg); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 12px; border-radius: 6px;
+    font-family: "SF Mono", Menlo, monospace; font-size: 13px;
+  }
+  .custom-path-row input:focus { outline: none; border-color: var(--accent); }
+  .custom-path-status {
+    margin-top: 8px; font-size: 12px;
+  }
+  .custom-path-status.ok { color: var(--good); }
+  .custom-path-status.bad { color: var(--bad); }
+
 </style>
 </head>
 <body>
@@ -269,22 +351,47 @@
 <div class="topbar">
   <div class="logo">APOCALYPSE</div>
   <div class="step-pills">
-    <div class="pill active" id="pill1">1. Choose Library</div>
-    <div class="pill" id="pill2">2. Pick ZIMs</div>
-    <div class="pill" id="pill3">3. Download</div>
+    <div class="pill active" id="pill0">1. Choose Drive</div>
+    <div class="pill" id="pill1">2. Choose Library</div>
+    <div class="pill" id="pill2">3. Pick ZIMs</div>
+    <div class="pill" id="pill3">4. Download</div>
   </div>
 </div>
 
 <div class="container">
 
+  <!-- ========== STEP 0: Drive picker ========== -->
+  <div class="step active" id="step0">
+    <h1>Where should Apocalypse live?</h1>
+    <p class="lede">Pick a drive. Internal works fine. External (especially exFAT) means you can unplug it and read everything from a different computer with no internet. <strong>You can change this later only by reinstalling.</strong></p>
+
+    <div id="drivesList" class="drives-list">
+      <div class="drive-loading">Detecting drives…</div>
+    </div>
+
+    <div class="custom-path">
+      <label>Or type a custom path:</label>
+      <div class="custom-path-row">
+        <input type="text" id="customPath" placeholder="/Volumes/MyDrive/apocalypse" />
+        <button class="btn" type="button" onclick="useCustomPath()">Use this path</button>
+      </div>
+      <div id="customPathStatus" class="custom-path-status"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn primary" id="step0Next" onclick="step0Continue()" disabled>Continue</button>
+    </div>
+  </div>
+
   <!-- ========== STEP 1: Welcome + bundle picker ========== -->
-  <div class="step active" id="step1">
+  <div class="step" id="step1">
     <h1>Welcome to Apocalypse</h1>
     <p class="lede">A self-contained offline knowledge library. Pick a starter pack below or skip ahead to choose individual ZIMs. You can always add more later.</p>
 
     <div class="bundles" id="bundles"></div>
 
     <div class="btn-row">
+      <button class="btn" onclick="goStep(0)">← Back</button>
       <button class="btn" onclick="goStep(2)">Skip, choose individually</button>
       <button class="btn primary" id="step1Next" onclick="goStep(2)" disabled>Continue with selection</button>
     </div>
@@ -399,6 +506,145 @@ async function init() {
   renderCatalog();
   updateMeter();
   setupModelPick();
+  // If the user already finished setup before, skip the drive picker.
+  // Re-running the wizard means "add more ZIMs", not "move my data".
+  if (STATUS && (STATUS.setup_complete || (STATUS.installed_ids || []).length > 0)) {
+    goStep(1);
+  } else {
+    loadDrives();
+  }
+}
+
+// ============= Drives (Step 0) =============
+let SELECTED_DRIVE_PATH = null;
+
+function fmtBytes(n) {
+  if (!n || n < 0) return '?';
+  const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let i = 0; let v = n;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return (i === 0 ? v.toFixed(0) : v.toFixed(1)) + ' ' + u[i];
+}
+
+function driveIcon(d) {
+  if (d.type === 'home') return '🏠';
+  if (d.type === 'external') return '💾';
+  return '📁';
+}
+
+async function loadDrives() {
+  const list = document.getElementById('drivesList');
+  let data;
+  try {
+    const r = await fetch('/api/drives');
+    data = await r.json();
+  } catch (e) {
+    list.innerHTML = `<div class="drive-loading">Could not list drives: ${e.message}. Use the custom path field below.</div>`;
+    return;
+  }
+  const drives = data.drives || [];
+  if (drives.length === 0) {
+    list.innerHTML = `<div class="drive-loading">No drives detected. Type a custom path below.</div>`;
+    return;
+  }
+  list.innerHTML = '';
+  for (const d of drives) {
+    const card = document.createElement('div');
+    card.className = 'drive-card' + (d.writable ? '' : ' disabled');
+    card.dataset.path = d.apocalypse_dir;
+    const tags = [];
+    if (d.type === 'external') tags.push(`<span class="drive-tag">${d.filesystem}</span>`);
+    if (d.portable) tags.push(`<span class="drive-tag portable">cross-OS portable</span>`);
+    else if (d.type === 'external' && d.filesystem !== 'unknown') tags.push(`<span class="drive-tag warn">${d.filesystem} (one-OS)</span>`);
+    if (d.has_existing) tags.push(`<span class="drive-tag essential">existing install</span>`);
+    if (!d.writable) tags.push(`<span class="drive-tag warn">read-only</span>`);
+
+    card.innerHTML = `
+      <div class="drive-icon">${driveIcon(d)}</div>
+      <div class="drive-info">
+        <div class="name">${d.label}</div>
+        <div class="path">${d.apocalypse_dir}</div>
+        <div class="tags">${tags.join('')}</div>
+      </div>
+      <div class="drive-space">
+        <div class="free">${fmtBytes(d.free)}</div>
+        <div class="total">free of ${fmtBytes(d.total)}</div>
+      </div>
+    `;
+    if (d.writable) {
+      card.addEventListener('click', () => selectDrive(d.apocalypse_dir, card));
+    }
+    list.appendChild(card);
+  }
+}
+
+function selectDrive(path, cardEl) {
+  document.querySelectorAll('.drive-card').forEach(c => c.classList.remove('selected'));
+  if (cardEl) cardEl.classList.add('selected');
+  SELECTED_DRIVE_PATH = path;
+  document.getElementById('step0Next').disabled = false;
+  // Stage the choice. We commit it via /api/install-dir when the user
+  // clicks Continue (so a casual click on a drive doesn't relocate yet).
+}
+
+async function commitDriveChoice() {
+  if (!SELECTED_DRIVE_PATH) return true;
+  const r = await fetch('/api/install-dir', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({path: SELECTED_DRIVE_PATH}),
+  });
+  const j = await r.json();
+  if (!j.ok) {
+    toast('Could not relocate: ' + (j.error || 'unknown error'));
+    return false;
+  }
+  // Refresh status so subsequent steps see the new install_dir / disk
+  try { STATUS = await (await fetch('/api/status')).json(); updateMeter(); } catch (_) {}
+  return true;
+}
+
+async function useCustomPath() {
+  const input = document.getElementById('customPath');
+  const status = document.getElementById('customPathStatus');
+  const path = input.value.trim();
+  if (!path) {
+    status.className = 'custom-path-status bad';
+    status.textContent = 'Type a path first.';
+    return;
+  }
+  status.className = 'custom-path-status';
+  status.textContent = 'Validating…';
+  // We can't validate without committing on the backend (validate_install_path
+  // is exposed only via POST /api/install-dir). Do a quick clientside sanity
+  // check, then mark this as the selected path so Continue commits it.
+  if (!path.startsWith('/') && !path.match(/^[A-Za-z]:[\\/]/)) {
+    status.className = 'custom-path-status bad';
+    status.textContent = 'Use an absolute path (starts with / on macOS or Linux, or like C:\\ on Windows).';
+    return;
+  }
+  // Ensure the path ends with /apocalypse so we don't pollute the parent dir.
+  let normalized = path;
+  if (!normalized.toLowerCase().endsWith('apocalypse')
+      && !normalized.toLowerCase().endsWith('apocalypse/')
+      && !normalized.toLowerCase().endsWith('apocalypse\\')) {
+    normalized = normalized.replace(/[\\/]+$/, '') + '/apocalypse';
+  }
+  SELECTED_DRIVE_PATH = normalized;
+  document.querySelectorAll('.drive-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('step0Next').disabled = false;
+  status.className = 'custom-path-status ok';
+  status.textContent = `Will install to ${normalized}`;
+}
+
+async function step0Continue() {
+  const btn = document.getElementById('step0Next');
+  btn.disabled = true;
+  btn.textContent = 'Setting up…';
+  const ok = await commitDriveChoice();
+  btn.disabled = false;
+  btn.textContent = 'Continue';
+  if (ok) goStep(1);
 }
 
 // ============= Bundles (Step 1) =============
@@ -547,9 +793,11 @@ function setupModelPick() {
 
 // ============= Step transitions =============
 function goStep(n) {
-  for (let i = 1; i <= 3; i++) {
-    document.getElementById('step' + i).classList.toggle('active', i === n);
+  for (let i = 0; i <= 3; i++) {
+    const stepEl = document.getElementById('step' + i);
+    if (stepEl) stepEl.classList.toggle('active', i === n);
     const pill = document.getElementById('pill' + i);
+    if (!pill) continue;
     pill.classList.remove('active', 'done');
     if (i < n) pill.classList.add('done');
     if (i === n) pill.classList.add('active');
