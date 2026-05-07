@@ -15,6 +15,8 @@ Routes:
   POST /api/download/start_url -> start a download by direct URL {url, name, size}
   GET  /api/download/progress  -> JSON list of {id, name, total, downloaded, status}
   POST /api/download/cancel    -> cancel a running download {id: "..."}
+  POST /api/download/retry     -> restart an errored or cancelled download {id} (resumes via Range header)
+  POST /api/download/clear     -> drop an errored/cancelled entry + delete .part {id}
   POST /api/download/remove    -> delete an installed ZIM {id: "..."} (frees disk)
   POST /api/services/restart   -> restart kiwix-serve / shim to pick up new ZIMs
   GET  /api/config             -> JSON current config (theme, model, install_dir, etc.)
@@ -438,6 +440,63 @@ def cancel_download(item_id):
     return False
 
 
+def retry_download(item_id):
+    """Restart a download that errored out or was cancelled.
+
+    Resume is implicit: Download._run reads any existing .part file size and
+    sends a Range header, so the new attempt picks up where the last one
+    stopped. We need this for the wizard's per-row Retry button — the only
+    other path was 'cancel everything and start over', which loses progress
+    on the downloads that succeeded.
+
+    Returns True if a retry was kicked off, False if the id is unknown or
+    the download is already running / done.
+    """
+    with _DOWNLOADS_LOCK:
+        d = _DOWNLOADS.get(item_id)
+        if not d:
+            return False
+        # Don't re-spawn an active or completed thread.
+        if d.status in ('queued', 'downloading', 'done'):
+            return False
+        # Reset state so the UI shows a fresh attempt. The .part file on disk
+        # stays — Download._run picks it up via the existing-bytes check.
+        d.status = 'queued'
+        d.error = None
+        d.finished_at = None
+        d.cancel_flag = threading.Event()
+        d.start()
+    return True
+
+
+def clear_download(item_id):
+    """Drop a download from the tracker AND delete its partial .part file.
+
+    Used by the wizard's per-row Remove button on errored / cancelled rows.
+    For DONE rows the user should use the existing remove_installed flow,
+    which deletes the finalized .zim by catalog prefix.
+
+    Returns True if anything was cleared, False if the id is unknown or
+    still active (we refuse to clear a running download — caller should
+    cancel first, then clear).
+    """
+    with _DOWNLOADS_LOCK:
+        d = _DOWNLOADS.get(item_id)
+        if not d:
+            return False
+        if d.status in ('queued', 'downloading'):
+            return False
+        # Best-effort delete of the partial. Silently swallow errors — the
+        # tracker entry comes off either way so the user isn't soft-locked.
+        try:
+            if d.part_path.exists():
+                d.part_path.unlink()
+        except Exception:
+            pass
+        _DOWNLOADS.pop(item_id, None)
+    return True
+
+
 def remove_installed(item_id):
     """Delete a ZIM file from disk."""
     item = _get_item(item_id)
@@ -611,7 +670,7 @@ def dispatch_get(path, qs):
             'theme': st.get('theme', 'terminal'),
             'model': st.get('model', '3b'),
             'disk': disk_for(_INSTALL_DIR),
-            'version': '1.3.5',
+            'version': '1.3.6',
             'author': 'Henry Ratterman',
             'author_url': 'https://henryratterman.com',
         })
@@ -686,6 +745,12 @@ def dispatch_post(path, body):
     if path == '/api/download/cancel':
         ok = cancel_download(body.get('id'))
         return _json_response({'cancelled': ok})
+    if path == '/api/download/retry':
+        ok = retry_download(body.get('id'))
+        return _json_response({'retried': ok})
+    if path == '/api/download/clear':
+        ok = clear_download(body.get('id'))
+        return _json_response({'cleared': ok})
     if path == '/api/download/remove':
         ok = remove_installed(body.get('id'))
         return _json_response({'removed': ok})

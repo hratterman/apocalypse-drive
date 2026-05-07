@@ -231,6 +231,28 @@
     word-break: break-word;
     white-space: pre-wrap;
   }
+  .dl-actions {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+  .btn-mini {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 12px;
+    padding: 5px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .btn-mini:hover {
+    background: var(--border);
+    border-color: var(--accent);
+  }
+  .btn-mini.danger { color: var(--bad); }
+  .btn-mini.danger:hover { border-color: var(--bad); background: rgba(248, 113, 113, 0.08); }
 
   .summary {
     background: var(--panel-2); border: 1px solid var(--border);
@@ -865,11 +887,19 @@ async function refreshProgress() {
     const res = await fetch('/api/download/progress');
     const data = await res.json();
     renderDownloads(data.downloads);
-    // Check if all done
+    // Stop polling once nothing is actively moving. We DO leave the timer
+    // running while there are 'error' or 'cancelled' rows so the user can
+    // hit Retry and see updated state without a hard refresh.
     const inProgress = data.downloads.filter(d => d.status === 'queued' || d.status === 'downloading').length;
     if (inProgress === 0 && data.downloads.length > 0) {
-      clearInterval(progressTimer);
-      document.getElementById('finishBtn').disabled = false;
+      // Enable the finish button when at least one download succeeded —
+      // partial completion is a legitimate end state if the user gives up
+      // on a stubborn error. Hard-locking finishBtn behind 100% would soft-
+      // lock the wizard exactly the way Henry hit it.
+      const anyDone = data.downloads.some(d => d.status === 'done');
+      document.getElementById('finishBtn').disabled = !anyDone;
+    } else {
+      document.getElementById('finishBtn').disabled = true;
     }
   } catch (e) {}
 }
@@ -891,6 +921,24 @@ function renderDownloads(downloads) {
     const fillClass = d.status === 'done' ? 'done' : (d.status === 'error' ? 'error' : '');
     const row = document.createElement('div');
     row.className = 'dl-row';
+
+    // Per-row action buttons, varied by status. Without these the user gets
+    // soft-locked on any failure (no retry, no remove, no escape from a
+    // dead URL or a lost network connection).
+    let actions = '';
+    if (d.status === 'error' || d.status === 'cancelled') {
+      actions = `
+        <div class="dl-actions">
+          <button class="btn-mini" onclick="retryDownload('${d.id}')">Retry</button>
+          <button class="btn-mini danger" onclick="clearDownload('${d.id}')">Remove</button>
+        </div>`;
+    } else if (d.status === 'queued' || d.status === 'downloading') {
+      actions = `
+        <div class="dl-actions">
+          <button class="btn-mini" onclick="cancelDownload('${d.id}')">Cancel</button>
+        </div>`;
+    }
+
     row.innerHTML = `
       <div class="top">
         <div class="name">${d.name}</div>
@@ -901,12 +949,48 @@ function renderDownloads(downloads) {
       </div>
       ${d.error ? `<div class="dl-error">${escapeHtmlForError(d.error)}</div>` : ''}
       <div class="dl-bar"><div class="fill ${fillClass}" style="width:${pct}%"></div></div>
+      ${actions}
     `;
     list.appendChild(row);
   }
   const overallPct = totalBytes > 0 ? (downloadedBytes / totalBytes * 100).toFixed(1) : 0;
   document.getElementById('dlSummary').innerHTML =
     `<strong>${doneCount} / ${downloads.length}</strong> complete · <strong>${fmtBytes(downloadedBytes)} / ${fmtBytes(totalBytes)}</strong> · ${overallPct}% overall`;
+}
+
+async function retryDownload(id) {
+  try {
+    await fetch('/api/download/retry', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id}),
+    });
+    // Re-arm the progress poller in case it stopped after the row errored.
+    if (!progressTimer) progressTimer = setInterval(refreshProgress, 1500);
+    refreshProgress();
+  } catch (e) { toast('Retry failed'); }
+}
+
+async function clearDownload(id) {
+  try {
+    await fetch('/api/download/clear', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id}),
+    });
+    refreshProgress();
+  } catch (e) { toast('Remove failed'); }
+}
+
+async function cancelDownload(id) {
+  try {
+    await fetch('/api/download/cancel', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id}),
+    });
+    refreshProgress();
+  } catch (e) { toast('Cancel failed'); }
 }
 
 async function finishSetup() {
