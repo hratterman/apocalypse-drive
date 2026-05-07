@@ -580,7 +580,7 @@ async function loadDrives() {
 
     let helpRow = '';
     if (hardBlock) {
-      helpRow = `<div class="drive-help">macOS mounted this volume read-only, usually because of a filesystem error. Open Disk Utility, select this drive, and run <strong>First Aid</strong>. If that fails, back up your data and reformat as ExFAT.</div>`;
+      helpRow = `<div class="drive-help">macOS mounted this volume read-only. If it's an SD card, check the small <strong>physical write-protect switch</strong> on the side of the card. If the switch is unlocked, the volume likely has a filesystem error: open Disk Utility, select this drive, run <strong>First Aid</strong>, or back up your data and reformat as ExFAT.</div>`;
     }
 
     card.innerHTML = `
