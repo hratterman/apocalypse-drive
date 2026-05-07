@@ -1240,6 +1240,48 @@ def main():
         except (ValueError, OSError, AttributeError):
             pass
 
+    # Parent watchdog: signal handlers handle clean Quit and clean Force Quit
+    # (both deliver SIGTERM first), but a SIGKILL on the parent (Activity
+    # Monitor's "Force Quit" hammer, kill -9, OOM kill, hard reboot) leaves
+    # the shim orphaned. The shim then squats on port 8888 and the next
+    # launch sees a stale dead-but-not-replying server. We poll the parent
+    # PID every 5s and self-terminate if it's gone. On Unix, getppid() == 1
+    # means we've been re-parented to launchd/init -- the original parent
+    # is dead. On Windows, we compare against the captured initial parent.
+    import os as _os
+    import threading as _threading
+
+    _initial_ppid = _os.getppid()
+
+    def _parent_watchdog():
+        while True:
+            try:
+                current_ppid = _os.getppid()
+                # Unix: re-parented to PID 1 (launchd/init) means original
+                # parent died. Windows: PPID changed from initial value.
+                if current_ppid == 1 or (
+                    sys.platform == 'win32' and current_ppid != _initial_ppid
+                ):
+                    print(f"\n[shim] parent process {_initial_ppid} is gone "
+                          f"(now reparented to {current_ppid}), shutting down")
+                    try:
+                        srv.shutdown()
+                    except Exception:
+                        pass
+                    # Hard exit. We can't trust serve_forever to actually
+                    # unblock if the parent died mid-request.
+                    _os._exit(0)
+            except Exception:
+                pass
+            time.sleep(5.0)
+
+    # Only run the watchdog when there IS an original parent that wasn't
+    # already init/launchd. If a user runs the shim directly from a
+    # terminal, the parent is the shell, which is fine (watchdog only
+    # fires on reparent, not on initial PPID > 1).
+    if _initial_ppid > 1:
+        _threading.Thread(target=_parent_watchdog, daemon=True).start()
+
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
