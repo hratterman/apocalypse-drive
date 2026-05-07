@@ -559,7 +559,7 @@ def dispatch_get(path, qs):
             'theme': st.get('theme', 'terminal'),
             'model': st.get('model', '3b'),
             'disk': disk_for(_INSTALL_DIR),
-            'version': '1.2.1',
+            'version': '1.2.2',
             'author': 'Henry Ratterman',
             'author_url': 'https://henryratterman.com',
         })

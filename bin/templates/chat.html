@@ -361,6 +361,7 @@
             stream: true,
             temperature: 0.5,
             max_tokens: 1200,
+            stop: ['<|eot_id|>', '<|end_of_text|>', '<|im_end|>', '<|endoftext|>'],
           }),
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -384,14 +385,31 @@
               const delta = json.choices?.[0]?.delta?.content;
               if (delta) {
                 answer += delta;
-                respDiv.textContent = answer;
+                // Strip Llama / ChatML / GPT end-of-turn markers that some
+                // local servers emit as visible content before honoring the
+                // stop list. Keep this in sync with the stop array above.
+                const cleaned = answer
+                  .replace(/<\|eot_id\|>/g, '')
+                  .replace(/<\|end_of_text\|>/g, '')
+                  .replace(/<\|im_end\|>/g, '')
+                  .replace(/<\|endoftext\|>/g, '')
+                  .replace(/<\|start_header_id\|>.*?<\|end_header_id\|>/gs, '')
+                  .trimEnd();
+                respDiv.textContent = cleaned;
                 messagesEl.scrollTop = messagesEl.scrollHeight;
               }
             } catch (_) {}
           }
         }
 
-        conversation.push({ role: 'assistant', content: answer });
+        const cleanedAnswer = answer
+          .replace(/<\|eot_id\|>/g, '')
+          .replace(/<\|end_of_text\|>/g, '')
+          .replace(/<\|im_end\|>/g, '')
+          .replace(/<\|endoftext\|>/g, '')
+          .replace(/<\|start_header_id\|>.*?<\|end_header_id\|>/gs, '')
+          .trim();
+        conversation.push({ role: 'assistant', content: cleanedAnswer });
         snapshotConversation();
       } catch (e) {
         respDiv.classList.add('error');
