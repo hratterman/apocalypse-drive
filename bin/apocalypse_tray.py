@@ -164,25 +164,37 @@ def find_install_dir():
         t.join(timeout=timeout)
         return result[0] if not t.is_alive() else False
 
-    def _is_usable_dir(path, timeout=2.0):
+    def _is_usable_dir(path, timeout=8.0):
         """Stronger check: directory exists AND we can listdir() it.
         Catches drives where stat() works but readdir() is wedged (fskit bug).
+
+        Retries once after a brief sleep to give an idle/sleeping USB drive
+        a chance to spin up. Drives that are truly wedged stay wedged across
+        retries; drives that are just asleep usually wake within ~2 seconds.
         """
-        if not _exists_with_timeout(path, 1.0):
+        if not _exists_with_timeout(path, 2.0):
             return False
-        result = [False]
-        def _probe():
-            try:
-                os.listdir(str(path))
-                result[0] = True
-            except Exception:
-                result[0] = False
-        t = threading.Thread(target=_probe, daemon=True)
-        t.start()
-        t.join(timeout=timeout)
-        return result[0] if not t.is_alive() else False
+        for attempt in range(2):
+            result = [False]
+            def _probe():
+                try:
+                    os.listdir(str(path))
+                    result[0] = True
+                except Exception:
+                    result[0] = False
+            t = threading.Thread(target=_probe, daemon=True)
+            t.start()
+            t.join(timeout=timeout)
+            if not t.is_alive() and result[0]:
+                return True
+            if attempt == 0:
+                # Give the drive a moment to wake up and try once more
+                time.sleep(0.5)
+        return False
 
     candidates = []
+    rejected_by_usable_check = []  # paths where outer dir check failed,
+                                    # but state.json may still exist
     if sys.platform == 'darwin' and _exists_with_timeout(Path('/Volumes'), 1.0):
         try:
             volumes = os.listdir('/Volumes')
@@ -191,10 +203,11 @@ def find_install_dir():
         for d in volumes:
             c = Path('/Volumes') / d / 'apocalypse'
             # Use the stronger usability check for external volumes.
-            if _is_usable_dir(c, 2.0):
+            if _is_usable_dir(c, 8.0):
                 candidates.append(c)
             else:
-                _llog(f"skipping wedged or missing /Volumes/{d}/apocalypse")
+                _llog(f"_is_usable_dir failed for /Volumes/{d}/apocalypse, will retry by state.json")
+                rejected_by_usable_check.append(c)
     candidates += [
         Path.home() / 'Apocalypse',
         Path.home() / 'apocalypse',
@@ -203,13 +216,25 @@ def find_install_dir():
     if sys.platform == 'win32':
         candidates.append(Path('C:/Apocalypse'))
 
+    # Pass 1: prefer any candidate (or rejected candidate) that has an existing
+    # state.json. state.json existence is the strongest signal that this IS
+    # the user's real install. Probing state.json directly side-steps the
+    # listdir wedge bug where an idle USB takes longer than the timeout.
+    for c in list(candidates) + rejected_by_usable_check:
+        if c and _exists_with_timeout(c / 'state.json', 3.0):
+            _llog(f"found existing install with state.json at {c}")
+            return c
+
+    # Pass 2: first usable candidate (no prior state, fresh install).
     for c in candidates:
         if c and _exists_with_timeout(c, 1.0):
+            _llog(f"using first usable candidate (no prior state) at {c}")
             return c
 
     # Default: ~/Apocalypse (created on first run)
     default = Path.home() / 'Apocalypse'
     default.mkdir(parents=True, exist_ok=True)
+    _llog(f"no candidates found, defaulting to {default}")
     return default
 
 
