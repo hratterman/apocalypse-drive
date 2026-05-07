@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Apocalypse — Offline Knowledge</title>
+<style>
+  /* =====================================================================
+     Apocalypse — themeable interface
+     Default theme is "terminal" (amber phosphor on black, CRT effects).
+     Other themes (paper, forest, solarized) drop the CRT effects in
+     favor of calm, comfortable reading.
+     ===================================================================== */
+
+  /* ---- Default: Terminal (amber phosphor) ---- */
+  :root, [data-theme="terminal"] {
+    --bg: #0a0500;
+    --bg-glow: #1a0a00;
+    --panel: #110800;
+    --border: #3a2400;
+    --text: #ffb347;
+    --text-bright: #ffcc66;
+    --text-dim: #8a5a1f;
+    --text-faint: #5a3a14;
+    --warn: #ff5e3a;
+    --ok: #4ade80;
+    --font-stack: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    --font-size: 14px;
+    --line-height: 1.55;
+    --text-shadow: 0 0 1px rgba(255, 179, 71, 0.5);
+    --crt-effects: 1; /* enable scanlines + flicker + vignette */
+    --label-prefix: '> ';
+    --button-text-transform: uppercase;
+    --button-letter-spacing: 1px;
+    --border-radius: 0;
+  }
+
+  /* ---- Paper (calming, NYRB / vintage field manual) ---- */
+  [data-theme="paper"] {
+    --bg: #f5efe1;
+    --bg-glow: #f8f2e6;
+    --panel: #fdf8eb;
+    --border: #c9bd9f;
+    --text: #2a2620;
+    --text-bright: #1a1612;
+    --text-dim: #6b5f48;
+    --text-faint: #9b8d72;
+    --warn: #b04030;
+    --ok: #4a7a3d;
+    --font-stack: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+    --font-size: 16px;
+    --line-height: 1.65;
+    --text-shadow: none;
+    --crt-effects: 0;
+    --label-prefix: '';
+    --button-text-transform: none;
+    --button-letter-spacing: normal;
+    --border-radius: 4px;
+  }
+
+  /* ---- Forest (quiet greens, grounded) ---- */
+  [data-theme="forest"] {
+    --bg: #0e1612;
+    --bg-glow: #14201a;
+    --panel: #16201b;
+    --border: #2d4035;
+    --text: #c8d4c0;
+    --text-bright: #e8efd9;
+    --text-dim: #7a8a72;
+    --text-faint: #4a5a48;
+    --warn: #d4805e;
+    --ok: #9bc080;
+    --font-stack: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --font-size: 15px;
+    --line-height: 1.6;
+    --text-shadow: none;
+    --crt-effects: 0;
+    --label-prefix: '';
+    --button-text-transform: none;
+    --button-letter-spacing: normal;
+    --border-radius: 6px;
+  }
+
+  /* ---- Solarized Light (gentle on the eyes) ---- */
+  [data-theme="solarized"] {
+    --bg: #fdf6e3;
+    --bg-glow: #fdf6e3;
+    --panel: #eee8d5;
+    --border: #d4cab1;
+    --text: #586e75;
+    --text-bright: #073642;
+    --text-dim: #93a1a1;
+    --text-faint: #b8b099;
+    --warn: #cb4b16;
+    --ok: #859900;
+    --font-stack: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+    --font-size: 14px;
+    --line-height: 1.6;
+    --text-shadow: none;
+    --crt-effects: 0;
+    --label-prefix: '';
+    --button-text-transform: none;
+    --button-letter-spacing: normal;
+    --border-radius: 4px;
+  }
+
+  /* ---- GEOCITIES 1997 ---- */
+  /* If you remember Netscape Navigator and 56k modems, this is for you. */
+  [data-theme="geocities"] {
+    --bg: #000080;          /* navy blue */
+    --bg-glow: #000080;
+    --panel: #c0c0c0;        /* Win95 gray */
+    --border: #000000;
+    --text: #ffff00;         /* YELLOW on navy */
+    --text-bright: #00ffff;  /* cyan */
+    --text-dim: #ff00ff;     /* magenta */
+    --text-faint: #ffffff;
+    --warn: #ff0000;
+    --ok: #00ff00;
+    --font-stack: 'Comic Sans MS', 'Chalkboard SE', cursive;
+    --font-size: 14px;
+    --line-height: 1.4;
+    --text-shadow: 1px 1px 0 #000000, 2px 2px 0 #ff00ff;
+    --crt-effects: 0;
+    --label-prefix: '';
+    --button-text-transform: none;
+    --button-letter-spacing: normal;
+    --border-radius: 0;
+  }
+
+  /* Geocities-specific overrides — lots of them */
+  [data-theme="geocities"] body {
+    /* Tiled "stars" background — base64 SVG of yellow stars on navy */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'><rect width='80' height='80' fill='%23000080'/><text x='10' y='20' fill='%23ffff00' font-family='serif' font-size='14'>★</text><text x='50' y='40' fill='%23ffffff' font-family='serif' font-size='10'>✦</text><text x='25' y='65' fill='%23ff00ff' font-family='serif' font-size='12'>✧</text><text x='65' y='75' fill='%2300ffff' font-family='serif' font-size='8'>✦</text></svg>") !important;
+    background-attachment: fixed !important;
+    background-repeat: repeat !important;
+  }
+
+  [data-theme="geocities"] header {
+    background: linear-gradient(90deg, #ff00ff, #00ffff, #ffff00, #ff0000);
+    border-bottom: 4px ridge #c0c0c0;
+    padding: 10px 16px;
+  }
+
+  [data-theme="geocities"] header h1 {
+    font-family: 'Times New Roman', serif !important;
+    color: #ffffff !important;
+    font-size: 22px !important;
+    font-weight: bold !important;
+    text-transform: none !important;
+    text-shadow: 2px 2px 0 #000000, 4px 4px 0 #ff00ff !important;
+  }
+
+  [data-theme="geocities"] header h1::before { content: '★ ' !important; color: #ffff00 !important; }
+  [data-theme="geocities"] header h1::after { content: ' ★' !important; color: #ffff00 !important; }
+
+  [data-theme="geocities"] .system-info {
+    background: #c0c0c0 !important;
+    color: #000080 !important;
+    border: 3px ridge #ffffff !important;
+    font-family: 'Times New Roman', serif !important;
+    font-weight: bold !important;
+  }
+
+  [data-theme="geocities"] .system-info .label { color: #ff0000 !important; }
+  [data-theme="geocities"] .system-info .value { color: #000080 !important; }
+
+  [data-theme="geocities"] .controls a {
+    color: #00ffff !important;
+    text-decoration: underline !important;
+    border-bottom: 0 !important;
+    text-shadow: 1px 1px 0 #000000 !important;
+  }
+  [data-theme="geocities"] .controls a:visited { color: #ff00ff !important; }
+  [data-theme="geocities"] .controls a:hover { color: #ffff00 !important; }
+
+  [data-theme="geocities"] .ask {
+    background: #c0c0c0 !important;
+    border: 4px ridge #ffffff !important;
+  }
+
+  [data-theme="geocities"] .ask input {
+    background: #ffffff !important;
+    color: #000000 !important;
+    text-shadow: none !important;
+    font-family: 'Times New Roman', serif !important;
+    border: 2px inset #808080 !important;
+    margin: 4px;
+  }
+
+  [data-theme="geocities"] .ask button {
+    background: linear-gradient(180deg, #ff0000, #800000) !important;
+    color: #ffff00 !important;
+    border: 3px outset #ff8080 !important;
+    font-family: 'Comic Sans MS', cursive !important;
+    font-weight: bold !important;
+    text-shadow: 1px 1px 0 #000000 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 2px !important;
+  }
+
+  [data-theme="geocities"] .answer {
+    background: #c0c0c0 !important;
+    border: 4px ridge #ffffff !important;
+    color: #000000 !important;
+    font-family: 'Times New Roman', serif !important;
+    font-size: 15px !important;
+  }
+
+  [data-theme="geocities"] .answer.empty {
+    color: #800080 !important;
+    font-style: italic !important;
+  }
+
+  [data-theme="geocities"] .citations {
+    background: #c0c0c0 !important;
+    border: 4px ridge #ffffff !important;
+  }
+
+  [data-theme="geocities"] .citations h3 {
+    display: block !important;
+    color: #ff0000 !important;
+    font-family: 'Comic Sans MS', cursive !important;
+    text-decoration: underline !important;
+    font-size: 16px !important;
+    margin: 0 0 12px 0 !important;
+  }
+
+  [data-theme="geocities"] .citation {
+    color: #000000 !important;
+    border-bottom: 2px dotted #800080 !important;
+  }
+
+  [data-theme="geocities"] .citation a {
+    color: #0000ff !important;
+    font-family: 'Times New Roman', serif !important;
+    font-weight: bold !important;
+  }
+  [data-theme="geocities"] .citation a:visited { color: #800080 !important; }
+  [data-theme="geocities"] .citation::before {
+    content: '🌟 ' !important;
+  }
+  [data-theme="geocities"] .citation .source { color: #008000 !important; }
+
+  /* Marquee scrolling text — pure CSS, no <marquee> tag needed */
+  [data-theme="geocities"] .geocities-marquee {
+    display: block;
+    background: #ffff00;
+    color: #ff0000;
+    font-family: 'Comic Sans MS', cursive;
+    font-weight: bold;
+    font-size: 14px;
+    padding: 6px;
+    border: 3px ridge #ff0000;
+    margin-bottom: 16px;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  [data-theme="geocities"] .geocities-marquee span {
+    display: inline-block;
+    padding-left: 100%;
+    animation: marquee 18s linear infinite;
+    text-shadow: 2px 2px 0 #000000;
+  }
+  @keyframes marquee {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+  }
+  body:not([data-theme="geocities"]) .geocities-marquee { display: none; }
+
+  /* Under Construction banner */
+  [data-theme="geocities"] .geocities-construction {
+    display: block !important;
+    text-align: center;
+    background: #ffff00;
+    color: #000000;
+    font-family: 'Comic Sans MS', cursive;
+    font-weight: bold;
+    padding: 12px;
+    margin-bottom: 16px;
+    border: 4px solid #ff0000;
+    font-size: 15px;
+  }
+  body:not([data-theme="geocities"]) .geocities-construction { display: none; }
+
+  /* Visitor counter & "best viewed in" footer */
+  [data-theme="geocities"] .geocities-footer {
+    display: block !important;
+    text-align: center;
+    background: #c0c0c0;
+    border: 3px ridge #ffffff;
+    padding: 16px;
+    margin-top: 24px;
+    color: #000080;
+    font-family: 'Times New Roman', serif;
+    font-size: 12px;
+  }
+  [data-theme="geocities"] .geocities-footer .counter {
+    display: inline-block;
+    background: #000000;
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    padding: 4px 10px;
+    margin: 0 6px;
+    border: 2px inset #404040;
+    font-size: 18px;
+    letter-spacing: 4px;
+  }
+  [data-theme="geocities"] .geocities-footer .blink {
+    animation: blinkText 1s steps(2) infinite;
+    color: #ff0000;
+    font-weight: bold;
+  }
+  @keyframes blinkText { 50% { opacity: 0; } }
+  body:not([data-theme="geocities"]) .geocities-footer { display: none; }
+
+  /* Hide the ASCII banner & title-block on geocities theme — we have our own */
+  [data-theme="geocities"] .banner { display: none !important; }
+  [data-theme="geocities"] .title-block { display: none !important; }
+
+  [data-theme="geocities"] .err {
+    background: #ffff00 !important;
+    border: 4px ridge #ff0000 !important;
+    color: #ff0000 !important;
+    font-family: 'Comic Sans MS', cursive !important;
+    font-weight: bold !important;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    background: var(--bg);
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font: var(--font-size)/var(--line-height) var(--font-stack);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    text-shadow: var(--text-shadow);
+  }
+
+  /* CRT effects only fire when --crt-effects is 1 (terminal theme) */
+  body[data-crt="1"] {
+    background-image:
+      radial-gradient(ellipse at center, var(--bg-glow) 0%, var(--bg) 80%),
+      repeating-linear-gradient(
+        0deg,
+        rgba(0, 0, 0, 0) 0px,
+        rgba(0, 0, 0, 0) 2px,
+        rgba(0, 0, 0, 0.15) 2px,
+        rgba(0, 0, 0, 0.15) 3px
+      );
+    background-attachment: fixed;
+    animation: flicker 4s infinite;
+  }
+
+  body[data-crt="1"]::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.8);
+    z-index: 1;
+  }
+
+  @keyframes flicker {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.97; }
+  }
+
+  header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--panel);
+  }
+
+  header h1 {
+    font-size: 13px;
+    font-weight: normal;
+    margin: 0;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--text-bright);
+  }
+
+  header h1::before {
+    content: var(--label-prefix);
+    color: var(--text-dim);
+  }
+
+  /* Theme switcher in the header */
+  .theme-switcher {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+    align-items: center;
+  }
+
+  .theme-switcher .label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 4px;
+  }
+
+  .theme-switcher button {
+    width: 22px;
+    height: 22px;
+    border: 1px solid var(--border);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    padding: 0;
+    transition: transform 0.1s;
+  }
+
+  .theme-switcher button:hover { transform: scale(1.1); }
+  .theme-switcher button.active {
+    border: 2px solid var(--text-bright);
+    transform: scale(1.1);
+  }
+
+  .theme-switcher button[data-set="terminal"]   { background: linear-gradient(135deg, #0a0500 50%, #ffb347 50%); }
+  .theme-switcher button[data-set="paper"]      { background: linear-gradient(135deg, #f5efe1 50%, #2a2620 50%); }
+  .theme-switcher button[data-set="forest"]     { background: linear-gradient(135deg, #0e1612 50%, #c8d4c0 50%); }
+  .theme-switcher button[data-set="solarized"]  { background: linear-gradient(135deg, #fdf6e3 50%, #586e75 50%); }
+  .theme-switcher button[data-set="geocities"]  { background: linear-gradient(135deg, #ff00ff 0%, #00ffff 33%, #ffff00 66%, #ff0000 100%); }
+
+  header .status {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-left: 16px;
+    border-left: 1px solid var(--border);
+    margin-left: 16px;
+  }
+
+  header .status .dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 6px;
+    background: var(--text-faint);
+    vertical-align: middle;
+    border-radius: 50%;
+  }
+
+  body[data-crt="1"] header .status .dot {
+    box-shadow: 0 0 4px currentColor;
+    border-radius: 0;
+  }
+
+  header .status.ok .dot { background: var(--ok); color: var(--ok); }
+  header .status.err .dot { background: var(--warn); color: var(--warn); }
+
+  main {
+    flex: 1;
+    max-width: 880px;
+    margin: 0 auto;
+    width: 100%;
+    padding: 32px 24px;
+  }
+
+  /* ASCII banner — only show on terminal theme */
+  .banner {
+    color: var(--text-dim);
+    font-size: 10px;
+    line-height: 1.2;
+    white-space: pre;
+    margin-bottom: 24px;
+    text-align: center;
+    overflow-x: auto;
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+
+  body:not([data-theme="terminal"]) .banner { display: none; }
+
+  /* Title shown on non-terminal themes (replaces ASCII banner) */
+  .title-block {
+    display: none;
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .title-block h2 {
+    font-size: 28px;
+    margin: 0 0 4px 0;
+    font-weight: 600;
+    color: var(--text-bright);
+  }
+  .title-block .subtitle {
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+  body:not([data-theme="terminal"]) .title-block { display: block; }
+
+  .system-info {
+    color: var(--text-faint);
+    font-size: 11px;
+    margin-bottom: 24px;
+    padding: 12px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--border-radius);
+    background: var(--panel);
+  }
+
+  .system-info .label { color: var(--text-dim); }
+  .system-info .value { color: var(--text); }
+
+  .controls {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+    margin-bottom: 24px;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .controls a {
+    color: var(--text-bright);
+    text-decoration: none;
+    border-bottom: 1px solid var(--text-faint);
+    padding-bottom: 1px;
+  }
+
+  body:not([data-theme="terminal"]) .controls {
+    text-transform: none;
+    letter-spacing: normal;
+    font-size: 13px;
+  }
+
+  body:not([data-theme="terminal"]) .controls a {
+    border-bottom: 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .controls a:hover {
+    color: var(--text-bright);
+    border-bottom-color: var(--text-bright);
+  }
+
+  .ask {
+    display: flex;
+    gap: 0;
+    margin-bottom: 24px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    position: relative;
+    border-radius: var(--border-radius);
+  }
+
+  .ask::before {
+    content: '> QUERY';
+    position: absolute;
+    top: -8px;
+    left: 12px;
+    background: var(--bg);
+    padding: 0 6px;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+
+  body:not([data-theme="terminal"]) .ask::before { display: none; }
+
+  .ask input {
+    flex: 1;
+    background: transparent;
+    border: 0;
+    color: var(--text-bright);
+    font: inherit;
+    font-size: var(--font-size);
+    padding: 14px 16px;
+    text-shadow: inherit;
+  }
+
+  .ask input::placeholder { color: var(--text-faint); }
+
+  .ask input:focus {
+    outline: none;
+    background: rgba(127, 127, 127, 0.05);
+  }
+
+  .ask button {
+    background: var(--text);
+    color: var(--bg);
+    border: 0;
+    padding: 0 24px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: bold;
+    cursor: pointer;
+    text-transform: var(--button-text-transform);
+    letter-spacing: var(--button-letter-spacing);
+    text-shadow: none;
+  }
+
+  .ask button:hover { background: var(--text-bright); }
+  .ask button:disabled {
+    background: var(--text-faint);
+    color: var(--bg);
+    cursor: not-allowed;
+  }
+
+  .answer {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--border-radius);
+    padding: 20px 24px;
+    margin-bottom: 16px;
+    white-space: pre-wrap;
+    min-height: 60px;
+    color: var(--text);
+    position: relative;
+    line-height: 1.7;
+  }
+
+  .answer::before {
+    content: '> RESPONSE';
+    position: absolute;
+    top: -8px;
+    left: 12px;
+    background: var(--bg);
+    padding: 0 6px;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+
+  body:not([data-theme="terminal"]) .answer::before { display: none; }
+
+  .answer.empty {
+    color: var(--text-faint);
+    font-style: normal;
+  }
+
+  .answer.empty::after {
+    content: '_';
+    animation: blink 1s steps(2) infinite;
+    color: var(--text);
+  }
+
+  body:not([data-theme="terminal"]) .answer.empty::after { display: none; }
+
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .citations {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--border-radius);
+    padding: 16px 20px 20px;
+    position: relative;
+  }
+
+  .citations::before {
+    content: '> SOURCES';
+    position: absolute;
+    top: -8px;
+    left: 12px;
+    background: var(--bg);
+    padding: 0 6px;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+
+  body:not([data-theme="terminal"]) .citations::before { display: none; }
+
+  .citations h3 { display: none; }
+  body:not([data-theme="terminal"]) .citations h3 {
+    display: block;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    margin: 0 0 12px 0;
+  }
+
+  .citation {
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 12px;
+  }
+
+  .citation:last-child { border-bottom: 0; }
+
+  .citation a { color: var(--text-bright); text-decoration: none; }
+  .citation a:hover { text-decoration: underline; }
+
+  .citation .source {
+    color: var(--text-faint);
+    font-size: 10px;
+    margin-left: 8px;
+  }
+
+  .citation::before {
+    content: '* ';
+    color: var(--text-dim);
+  }
+
+  body:not([data-theme="terminal"]) .citation::before { content: '— '; }
+
+  .err {
+    color: var(--warn);
+    font-size: 12px;
+    padding: 12px 16px;
+    background: var(--panel);
+    border: 1px solid var(--warn);
+    border-radius: var(--border-radius);
+    margin-bottom: 16px;
+  }
+
+  .err::before {
+    content: '! ERROR: ';
+    font-weight: bold;
+  }
+
+  body:not([data-theme="terminal"]) .err::before { content: 'Error: '; }
+
+  main, header { position: relative; z-index: 2; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Apocalypse Offline Knowledge System</h1>
+  <div class="theme-switcher" id="themeSwitcher">
+    <span class="label">theme</span>
+    <button data-set="terminal" title="Terminal (amber phosphor)"></button>
+    <button data-set="paper" title="Paper (calming, serif)"></button>
+    <button data-set="forest" title="Forest (quiet greens)"></button>
+    <button data-set="solarized" title="Solarized (gentle on eyes)"></button>
+    <button data-set="geocities" title="GEOCITIES 1997 ★"></button>
+  </div>
+  <div class="status" id="status"><span class="dot"></span><span id="statusText">checking…</span></div>
+</header>
+
+<main>
+  <pre class="banner">    █████╗ ██████╗  ██████╗  ██████╗ █████╗ ██╗  ██╗   ██╗██████╗ ███████╗███████╗
+   ██╔══██╗██╔══██╗██╔═══██╗██╔════╝██╔══██╗██║  ╚██╗ ██╔╝██╔══██╗██╔════╝██╔════╝
+   ███████║██████╔╝██║   ██║██║     ███████║██║   ╚████╔╝ ██████╔╝███████╗█████╗
+   ██╔══██║██╔═══╝ ██║   ██║██║     ██╔══██║██║    ╚██╔╝  ██╔═══╝ ╚════██║██╔══╝
+   ██║  ██║██║     ╚██████╔╝╚██████╗██║  ██║███████╗██║   ██║     ███████║███████╗
+   ╚═╝  ╚═╝╚═╝      ╚═════╝  ╚═════╝╚═╝  ╚═╝╚══════╝╚═╝   ╚═╝     ╚══════╝╚══════╝
+                       OFFLINE KNOWLEDGE TERMINAL · v1.0</pre>
+
+  <div class="title-block">
+    <h2>Apocalypse</h2>
+    <div class="subtitle">An offline knowledge library, with citations.</div>
+  </div>
+
+  <!-- Geocities-only: scrolling marquee at the top -->
+  <div class="geocities-marquee" style="display:none">
+    <span>★★★ WELCOME TO MY HOMEPAGE!!! ★★★ THIS SITE IS BEST VIEWED IN NETSCAPE NAVIGATOR 4.0 AT 800x600 ★★★ DON'T FORGET TO SIGN MY GUESTBOOK!!! ★★★ POWERED BY 56K MODEM AND DREAMS ★★★</span>
+  </div>
+
+  <!-- Geocities-only: under-construction banner -->
+  <div class="geocities-construction" style="display:none">
+    🚧 🚜 UNDER CONSTRUCTION!!! 🚜 🚧 — please excuse the dust while we improve your post-apocalyptic experience —
+  </div>
+
+  <div class="system-info" id="sysinfo">
+    <span class="label">SYS:</span> <span class="value">initializing…</span>
+  </div>
+
+  <div class="controls">
+    <a id="kiwixLink" href="http://localhost:8888" target="_blank">[ browse library ]</a>
+    <a id="llamaLink" href="http://localhost:8081" target="_blank">[ raw llm chat ]</a>
+  </div>
+
+  <div id="err" class="err" style="display:none"></div>
+
+  <form class="ask" id="askForm">
+    <input id="q" placeholder="ask anything... (e.g. how do I bleed hydraulic disc brakes?)" autocomplete="off" />
+    <button id="askBtn" type="submit">Execute</button>
+  </form>
+
+  <div class="answer empty" id="answer">awaiting query </div>
+
+  <div class="citations" id="citations" style="display:none">
+    <h3>Sources</h3>
+    <div id="citationList"></div>
+  </div>
+
+  <!-- Geocities-only footer with visitor counter and stamps -->
+  <div class="geocities-footer" style="display:none">
+    <div style="margin-bottom:10px;">
+      <strong>YOU ARE VISITOR NUMBER:</strong>
+      <span class="counter" id="geoCounter">0000042</span>
+    </div>
+    <div class="blink">★ NEW! ★ UPDATED DAILY! ★ NEW! ★</div>
+    <div style="margin-top:10px;font-size:11px;">
+      Best viewed in <strong>Netscape Navigator 4.0</strong> at <strong>800x600</strong>
+      <br/>© 1997 ApocalypseSoft Inc. ™ — A Geocities/HeartlandHillsidePark/2049 site
+      <br/>Sign my guestbook! · <a href="#" style="color:#0000ff;">[ View Guestbook ]</a> · <a href="#" style="color:#0000ff;">[ Email Webmaster ]</a>
+    </div>
+  </div>
+</main>
+
+<script>
+const urlParams = new URLSearchParams(location.search);
+
+// ===== Theme system =====
+// Themes: terminal (default, amber phosphor + CRT), paper (warm cream + serif),
+// forest (quiet greens, sans), solarized (classic gentle palette),
+// geocities (1997 web with marquee, stars, Comic Sans, visitor counter).
+// Persisted to localStorage so the choice survives across sessions.
+const THEMES = ['terminal', 'paper', 'forest', 'solarized', 'geocities'];
+function applyTheme(name) {
+  if (!THEMES.includes(name)) name = 'terminal';
+  document.body.dataset.theme = name;
+  // CRT effects only fire on terminal theme
+  document.body.dataset.crt = (name === 'terminal') ? '1' : '0';
+  // Update active state on switcher buttons
+  document.querySelectorAll('#themeSwitcher button').forEach(b => {
+    b.classList.toggle('active', b.dataset.set === name);
+  });
+  // Show/hide the geocities-only DOM elements
+  const showGeo = (name === 'geocities');
+  const showHide = (cls, show) => {
+    document.querySelectorAll('.' + cls).forEach(el => {
+      el.style.display = show ? '' : 'none';
+    });
+  };
+  showHide('geocities-marquee', showGeo);
+  showHide('geocities-construction', showGeo);
+  showHide('geocities-footer', showGeo);
+  // Bump the visitor counter when geocities theme activates
+  if (showGeo) {
+    let n = 41;
+    try {
+      n = parseInt(localStorage.getItem('apocalypse-visitor-counter') || '41', 10);
+    } catch (e) {}
+    n += 1;
+    try { localStorage.setItem('apocalypse-visitor-counter', String(n)); } catch (e) {}
+    const counterEl = document.getElementById('geoCounter');
+    if (counterEl) counterEl.textContent = String(n).padStart(7, '0');
+  }
+  try { localStorage.setItem('apocalypse-theme', name); } catch (e) {}
+}
+// Restore saved theme (or default to terminal). Run BEFORE any rendering.
+const savedTheme = (() => {
+  try { return localStorage.getItem('apocalypse-theme') || 'terminal'; }
+  catch (e) { return 'terminal'; }
+})();
+applyTheme(savedTheme);
+// Wire up the switcher buttons
+document.getElementById('themeSwitcher').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-set]');
+  if (btn) applyTheme(btn.dataset.set);
+});
+
+
+// Defaults are 8888/8081 — but on Mac the launcher may have picked alternate
+// ports (8890+) when 8888 was taken by another service like Docker. Probe
+// candidates so a forgotten ?kiwix= param doesn't silently route you to the
+// wrong server.
+let KIWIX_PORT = urlParams.get('kiwix') || null;
+let LLM_PORT = urlParams.get('llm') || null;
+let KIWIX = null;
+let LLAMA = null;
+const LLM_ONLY = urlParams.get('mode') === 'llm-only';
+
+async function probePort(port, healthPath) {
+  try {
+    const r = await fetch(`http://localhost:${port}${healthPath}`, {
+      signal: AbortSignal.timeout(1500)
+    });
+    return r.ok || r.status === 302;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function autoDetectPorts() {
+  const kiwixCandidates = KIWIX_PORT ? [KIWIX_PORT] : ['8890', '8891', '8892', '8893', '18888', '8888'];
+  const llmCandidates = LLM_PORT ? [LLM_PORT] : ['8081', '8082', '8083', '18081'];
+
+  // Prefer the Mac Python shim because it has the Wikipedia-first ranking.
+  // Identify the shim by a unique string in its index page.
+  for (const p of kiwixCandidates) {
+    try {
+      const r = await fetch(`http://localhost:${p}/`, { signal: AbortSignal.timeout(1500) });
+      if (!r.ok) continue;
+      const body = await r.text();
+      // Shim's index page contains this exact string
+      if (body.includes('Apocalypse Kiwix Shim')) {
+        KIWIX_PORT = p;
+        break;
+      }
+      // Otherwise accept any kiwix-serve-like server as a fallback
+      if (!KIWIX_PORT && (body.includes('wikipedia_en') || body.includes('content/'))) {
+        KIWIX_PORT = p;
+        // Don't break — keep looking for the shim, which is preferred
+      }
+    } catch (_) {}
+  }
+  KIWIX_PORT = KIWIX_PORT || kiwixCandidates[0];
+  KIWIX = `http://localhost:${KIWIX_PORT}`;
+
+  for (const p of llmCandidates) {
+    if (await probePort(p, '/v1/models')) {
+      LLM_PORT = p;
+      break;
+    }
+  }
+  LLM_PORT = LLM_PORT || llmCandidates[0];
+  LLAMA = `http://localhost:${LLM_PORT}`;
+}
+
+// Update visible header links to match the ports we're actually using
+let portsReady = autoDetectPorts();
+document.addEventListener('DOMContentLoaded', () => {
+  portsReady.then(() => {
+    const k = document.getElementById('kiwixLink');
+    const l = document.getElementById('llamaLink');
+    if (k) k.href = KIWIX;
+    if (l) l.href = LLAMA;
+  });
+});
+
+const statusEl = document.getElementById('status');
+const statusText = document.getElementById('statusText');
+const errEl = document.getElementById('err');
+const answerEl = document.getElementById('answer');
+const citationsEl = document.getElementById('citations');
+const citationList = document.getElementById('citationList');
+const askForm = document.getElementById('askForm');
+const qInput = document.getElementById('q');
+const askBtn = document.getElementById('askBtn');
+
+if (LLM_ONLY) {
+  document.body.dataset.mode = 'llm-only';
+  qInput.placeholder = 'Ask anything (LLM only — Kiwix opens in its own window on Mac)';
+  answerEl.textContent = 'Ask the local LLM directly. On Mac the Kiwix library opens in its own desktop app — search articles there. On Linux and Windows this UI also pulls relevant articles into the answer.';
+}
+
+async function checkServices() {
+  await portsReady;
+  let kiwixOk = false, llamaOk = false;
+  let kiwixData = null, llamaData = null;
+
+  if (!LLM_ONLY) {
+    try {
+      const r = await fetch(KIWIX + '/');
+      kiwixOk = r.ok || r.status === 302;
+      // Pull the loaded-ZIM count from the shim's index page
+      if (kiwixOk) {
+        const html = await r.text();
+        const m = html.match(/(\d+)\s+ZIMs?\s+loaded/i);
+        if (m) kiwixData = { zims: parseInt(m[1]) };
+      }
+    } catch (e) {}
+  }
+  try {
+    const r = await fetch(LLAMA + '/v1/models');
+    llamaOk = r.ok;
+    if (llamaOk) {
+      const data = await r.json();
+      const id = data.data?.[0]?.id || 'unknown';
+      llamaData = { model: id.split('/').pop().replace(/\.(gguf|llamafile)$/i, '') };
+    }
+  } catch (e) {}
+
+  // Populate the system-info readout
+  const sysInfo = document.getElementById('sysinfo');
+  if (sysInfo) {
+    const parts = [];
+    parts.push(`<span class="label">KIWIX:</span> <span class="value">${kiwixOk ? `online · ${kiwixData?.zims || '?'} archives loaded` : 'offline'}</span>`);
+    parts.push(`<span class="label">LLM:</span> <span class="value">${llamaOk ? `online · ${llamaData?.model || 'ready'}` : 'offline'}</span>`);
+    parts.push(`<span class="label">MODE:</span> <span class="value">${LLM_ONLY ? 'llm-only' : 'rag (retrieval-augmented)'}</span>`);
+    parts.push(`<span class="label">NET:</span> <span class="value">localhost only · no internet</span>`);
+    sysInfo.innerHTML = parts.join('  ·  ');
+  }
+
+  if (LLM_ONLY) {
+    if (llamaOk) {
+      statusEl.className = 'status ok';
+      statusText.textContent = 'LLM ONLINE';
+    } else {
+      statusEl.className = 'status err';
+      statusText.textContent = 'LLM OFFLINE';
+    }
+    return { kiwixOk, llamaOk };
+  }
+
+  if (kiwixOk && llamaOk) {
+    statusEl.className = 'status ok';
+    statusText.textContent = 'ALL SYSTEMS ONLINE';
+  } else if (kiwixOk) {
+    statusEl.className = 'status err';
+    statusText.textContent = 'LLM OFFLINE';
+  } else if (llamaOk) {
+    statusEl.className = 'status err';
+    statusText.textContent = 'KIWIX OFFLINE';
+  } else {
+    statusEl.className = 'status err';
+    statusText.textContent = 'ALL SYSTEMS OFFLINE';
+  }
+  return { kiwixOk, llamaOk };
+}
+
+function showError(msg) {
+  errEl.textContent = msg;
+  errEl.style.display = 'block';
+}
+function clearError() {
+  errEl.style.display = 'none';
+}
+
+// Strip HTML to plain text
+function htmlToText(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('script, style, .navbox, .infobox, table.wikitable, sup.reference').forEach(n => n.remove());
+  return (doc.body.innerText || doc.body.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+async function searchKiwix(query) {
+  await portsReady;
+  // Strip natural-language wrapper words to give the BM25 search better terms
+  const cleaned = query
+    .toLowerCase()
+    .replace(/\b(how|do|does|did|can|could|should|would|is|are|was|were|the|a|an|of|to|i|me|my|you|your|what|when|where|why|tell|me|about|please)\b/g, ' ')
+    .replace(/[?!.,;:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || query;
+  const url = KIWIX + '/search?pattern=' + encodeURIComponent(cleaned) + '&pageLength=5';
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('Kiwix search failed: ' + r.status);
+  const html = await r.text();
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const results = [];
+  doc.querySelectorAll('.results li a').forEach(a => {
+    const href = a.getAttribute('href');
+    if (!href || !href.startsWith('/content/')) return;
+    const parts = href.replace('/content/', '').split('/');
+    const book = parts.shift();
+    const title = a.textContent.trim();
+    results.push({ url: KIWIX + href, path: href, book, title });
+  });
+  return results.slice(0, 4);
+}
+
+async function fetchArticle(url) {
+  const r = await fetch(url);
+  if (!r.ok) return null;
+  const html = await r.text();
+  const text = htmlToText(html);
+  return text.slice(0, 6000);
+}
+
+async function callLLM(question, contextChunks) {
+  await portsReady;
+  let messages;
+  if (contextChunks && contextChunks.length) {
+    const context = contextChunks
+      .map((c, i) => `[Source ${i+1}: ${c.title}]\n${c.text}`)
+      .join('\n\n---\n\n');
+    messages = [
+      {
+        role: 'system',
+        content: 'You are an offline reference assistant. Strict rules:\n1. Use ONLY the provided sources. Do NOT add facts from your training, even if you "know" the answer.\n2. Cite every claim by [Source N].\n3. If the sources do NOT contain the answer, your reply must be exactly: "The retrieved sources do not contain a direct answer." then optionally one sentence describing what the sources DO discuss, plus a suggested better search term. NEVER fall back to guessing or general knowledge.\n4. Never write a sentence without a [Source N] citation. If you cannot cite it, do not write it.'
+      },
+      {
+        role: 'user',
+        content: `Sources:\n\n${context}\n\n---\n\nQuestion: ${question}`
+      }
+    ];
+  } else {
+    messages = [
+      {
+        role: 'system',
+        content: 'You are an offline reference assistant. Answer from your training. Be concise and practical. If you do not know, say so.'
+      },
+      { role: 'user', content: question }
+    ];
+  }
+
+  const r = await fetch(LLAMA + '/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'local',
+      messages,
+      stream: true,
+      temperature: 0.3,
+      max_tokens: 800,
+      stop: ['<|eot_id|>', '<|end_of_text|>', '<|im_end|>']
+    })
+  });
+
+  if (!r.ok) throw new Error('LLM error: ' + r.status);
+
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let answer = '';
+
+  answerEl.classList.remove('empty');
+  answerEl.textContent = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6).trim();
+      if (data === '[DONE]') return answer;
+      try {
+        const json = JSON.parse(data);
+        const delta = json.choices?.[0]?.delta?.content;
+        if (delta) {
+          answer += delta;
+          answerEl.textContent = answer;
+        }
+      } catch (e) {}
+    }
+  }
+  return answer;
+}
+
+function renderCitations(chunks) {
+  citationList.innerHTML = '';
+  chunks.forEach((c, i) => {
+    const div = document.createElement('div');
+    div.className = 'citation';
+    div.innerHTML = `
+      <div><span class="source">[${i+1}]</span> <a href="${c.url}" target="_blank">${c.title}</a></div>
+      <div class="source">${c.book}</div>
+    `;
+    citationList.appendChild(div);
+  });
+  citationsEl.style.display = chunks.length ? 'block' : 'none';
+}
+
+askForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const q = qInput.value.trim();
+  if (!q) return;
+
+  clearError();
+  askBtn.disabled = true;
+  askBtn.textContent = 'Processing…';
+  answerEl.classList.add('empty');
+  citationsEl.style.display = 'none';
+
+  // LLM-only mode (no Kiwix): fall back to old direct-LLM call
+  if (LLM_ONLY) {
+    answerEl.textContent = 'Querying LLM…';
+    try {
+      await callLLM(q, []);
+    } catch (e) {
+      showError(e.message);
+      answerEl.textContent = '';
+      answerEl.classList.add('empty');
+    } finally {
+      askBtn.disabled = false;
+      askBtn.textContent = 'Execute';
+    }
+    return;
+  }
+
+  // Full RAG: hand the question to the shim's /answer endpoint, which does
+  // LLM-driven title prediction → multi-strategy retrieval → focused-section
+  // extraction → final answer in one shot. The shim handles ALL the work.
+  await portsReady;
+  answerEl.textContent = '[ predicting relevant articles · retrieving sources · generating answer ]\n[ this can take 20-40 seconds for complex queries ]';
+
+  try {
+    const r = await fetch(KIWIX + '/answer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q })
+    });
+    if (!r.ok) throw new Error('Answer endpoint failed: ' + r.status);
+    const data = await r.json();
+
+    // Render the answer
+    answerEl.classList.remove('empty');
+    answerEl.textContent = data.answer || '(no answer)';
+
+    // Render the sources
+    const chunks = (data.sources || []).map(s => ({
+      url: KIWIX + s.url,
+      title: s.title,
+      book: s.book,
+    }));
+    renderCitations(chunks);
+
+    // Show timing in the corner so we can see what's slow
+    if (data.timing) {
+      const t = data.timing;
+      const total = (t.gather || 0) + (t.score || 0) + (t.answer || 0);
+      const note = document.createElement('div');
+      note.style.cssText = 'color:#888;font-size:11px;margin-top:8px;';
+      note.textContent = `gather: ${t.gather}s · answer: ${t.answer}s · total: ${total.toFixed(1)}s`;
+      answerEl.appendChild(note);
+    }
+  } catch (e) {
+    showError(e.message);
+    answerEl.textContent = '';
+    answerEl.classList.add('empty');
+  } finally {
+    askBtn.disabled = false;
+    askBtn.textContent = 'Execute';
+  }
+});
+
+checkServices();
+setInterval(checkServices, 5000);
+</script>
+</body>
+</html>
