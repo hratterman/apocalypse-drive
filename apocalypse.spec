@@ -55,6 +55,7 @@ datas = [
     (str(ROOT / 'bin' / 'setup_routes.py'),   'bin'),
     (str(ROOT / 'bin' / 'kiwix_opds.py'),     'bin'),
     (str(ROOT / 'bin' / 'templates'),         'bin/templates'),
+    (str(ROOT / 'bin' / 'static'),            'bin/static'),
     (str(ROOT / 'data' / 'catalog.json'),     'data'),
     (str(ROOT / 'Apocalypse.html'),           '.'),
 ]

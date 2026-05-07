@@ -793,8 +793,8 @@
   </div>
 
   <div class="controls">
-    <a id="kiwixLink" href="http://localhost:8888" target="_blank">[ browse library ]</a>
-    <a id="llamaLink" href="http://localhost:8081" target="_blank">[ raw llm chat ]</a>
+<a id="kiwixLink" href="/library">[ browse library ]</a>
+<a id="llamaLink" href="/chat">[ raw llm chat ]</a>
   </div>
 
   <div id="err" class="err" style="display:none"></div>
@@ -961,14 +961,19 @@ async function autoDetectPorts() {
   LLAMA = `http://localhost:${LLM_PORT}`;
 }
 
-// Update visible header links to match the ports we're actually using
+// Update visible header links to match the ports we're actually using.
+// When served by the shim itself, leave the relative /library and /chat
+// hrefs alone. They resolve to the shim origin and stay themed. Only
+// rewrite to absolute origin URLs when this page was loaded as a static
+// file (file://) where relative paths would 404.
 let portsReady = autoDetectPorts();
 document.addEventListener('DOMContentLoaded', () => {
   portsReady.then(() => {
     const k = document.getElementById('kiwixLink');
     const l = document.getElementById('llamaLink');
-    if (k) k.href = KIWIX;
-    if (l) l.href = LLAMA;
+    const isFileProto = window.location.protocol === 'file:';
+    if (k && isFileProto) k.href = KIWIX + '/library';
+    if (l && isFileProto) l.href = KIWIX + '/chat';
   });
 });
 

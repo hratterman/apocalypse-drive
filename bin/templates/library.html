@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Apocalypse · Library</title>
+<link rel="stylesheet" href="/static/apocalypse-theme.css" />
+<style>
+  /* Library-specific extensions on top of the shared theme. */
+  .library-page main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px 24px 80px;
+  }
+
+  .lib-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .lib-header h2 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--text-bright);
+    text-transform: var(--button-text-transform);
+    letter-spacing: var(--button-letter-spacing);
+  }
+
+  .lib-meta {
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  .lib-empty {
+    border: 1px dashed var(--border);
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--text-dim);
+    border-radius: var(--border-radius);
+    margin-top: 20px;
+  }
+
+  .lib-empty a {
+    color: var(--text-bright);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--text-dim);
+  }
+
+  .lib-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 14px;
+    margin-top: 16px;
+  }
+
+  .zim-card {
+    border: 1px solid var(--border);
+    background: var(--panel);
+    padding: 16px 18px;
+    border-radius: var(--border-radius);
+    text-decoration: none;
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: border-color 0.15s, transform 0.15s;
+    position: relative;
+  }
+
+  .zim-card:hover {
+    border-color: var(--text-bright);
+    transform: translateY(-1px);
+  }
+
+  .zim-card .title {
+    color: var(--text-bright);
+    font-weight: 700;
+    font-size: 15px;
+    text-transform: var(--button-text-transform);
+    letter-spacing: var(--button-letter-spacing);
+    text-shadow: var(--text-shadow);
+  }
+
+  .zim-card .subtitle {
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .zim-card .meta {
+    margin-top: auto;
+    display: flex;
+    gap: 12px;
+    color: var(--text-faint);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .zim-card .meta span::before { content: '· '; }
+  .zim-card .meta span:first-child::before { content: ''; }
+
+  .essential-tag {
+    display: inline-block;
+    padding: 2px 6px;
+    margin-left: 8px;
+    background: var(--text-faint);
+    color: var(--bg);
+    font-size: 10px;
+    letter-spacing: 1px;
+    border-radius: 2px;
+    vertical-align: middle;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin: 8px 0 12px;
+  }
+
+  .nav-links a {
+    color: var(--text-bright);
+    text-decoration: none;
+    text-transform: var(--button-text-transform);
+    letter-spacing: var(--button-letter-spacing);
+    font-size: 13px;
+  }
+
+  .nav-links a:hover { color: var(--text); }
+
+  .lib-error {
+    border: 1px solid var(--warn);
+    color: var(--warn);
+    padding: 12px 16px;
+    margin-top: 16px;
+    border-radius: var(--border-radius);
+  }
+
+  /* Geocities-specific overrides for cards */
+  [data-theme="geocities"] .zim-card {
+    background: #c0c0c0 !important;
+    border: 3px outset #ffffff !important;
+    color: #000080 !important;
+  }
+  [data-theme="geocities"] .zim-card .title { color: #ff0000 !important; }
+  [data-theme="geocities"] .zim-card .subtitle { color: #000080 !important; }
+  [data-theme="geocities"] .zim-card .meta { color: #800080 !important; }
+</style>
+</head>
+<body class="library-page" data-theme="terminal" data-crt="1">
+  <div class="crt-overlay"></div>
+
+  <header>
+    <h1>APOCALYPSE LIBRARY</h1>
+    <div id="themeSwitcher" class="theme-switcher">
+      <button data-set="terminal" title="Terminal (amber phosphor)"></button>
+      <button data-set="paper" title="Paper (calming, serif)"></button>
+      <button data-set="forest" title="Forest (quiet greens)"></button>
+      <button data-set="solarized" title="Solarized (gentle on eyes)"></button>
+      <button data-set="geocities" title="GEOCITIES 1997 ★"></button>
+    </div>
+  </header>
+
+  <main>
+    <div class="nav-links">
+      <a href="/">[ home ]</a>
+      <a href="/chat">[ raw llm chat ]</a>
+      <a href="/setup">[ add more zims ]</a>
+      <a href="/admin">[ admin ]</a>
+    </div>
+
+    <div class="lib-header">
+      <h2>Installed knowledge</h2>
+      <div class="lib-meta" id="libMeta">Loading…</div>
+    </div>
+
+    <div id="libContent">
+      <div class="lib-empty">Loading installed ZIMs…</div>
+    </div>
+  </main>
+
+  <script src="/static/apocalypse-theme.js"></script>
+  <script>
+    const fmtBytes = (n) => {
+      if (!n || n < 0) return '?';
+      const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+      let i = 0; let v = n;
+      while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+      return (i === 0 ? v.toFixed(0) : v.toFixed(1)) + ' ' + u[i];
+    };
+
+    function escapeHtml(s) {
+      return String(s || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    async function loadLibrary() {
+      const meta = document.getElementById('libMeta');
+      const wrap = document.getElementById('libContent');
+      try {
+        const [statusR, catalogR] = await Promise.all([
+          fetch('/api/status').then(r => r.json()),
+          fetch('/api/catalog').then(r => r.json()),
+        ]);
+
+        const installed = statusR.installed_ids || [];
+        const items = (catalogR.items || []).filter(it => installed.includes(it.id));
+
+        // Also show any on-disk ZIM that isn't in the catalog (custom imports)
+        // by querying the shim's own /api endpoint indirectly via search?book=
+        const known = new Set(items.map(it => it.kiwix_name));
+
+        if (items.length === 0) {
+          meta.textContent = '';
+          wrap.innerHTML = `
+            <div class="lib-empty">
+              <p>No ZIMs installed yet.</p>
+              <p><a href="/setup">Open the setup wizard</a> to download some, or <a href="/admin">manage from the admin page</a>.</p>
+            </div>
+          `;
+          return;
+        }
+
+        const totalBytes = items.reduce((acc, it) => acc + (it.size_bytes || 0), 0);
+        meta.textContent = `${items.length} archive${items.length === 1 ? '' : 's'} · ${fmtBytes(totalBytes)} on disk`;
+
+        wrap.innerHTML = '<div class="lib-grid">' + items.map(it => {
+          // Build the ZIM browse URL. Each book is served at /content/<filename>/
+          // We don't know the exact filename so we use kiwix_name as prefix and
+          // let the shim resolve via /viewer or /content/<book>.
+          const slug = encodeURIComponent(it.kiwix_name);
+          // Open via /viewer?book=<id> which the shim resolves to the main entry
+          return `
+            <a class="zim-card" href="/viewer?book=${slug}" target="_blank" rel="noopener">
+              <div class="title">${escapeHtml(it.title)}${it.essential ? '<span class="essential-tag">ESSENTIAL</span>' : ''}</div>
+              <div class="subtitle">${escapeHtml(it.subtitle || it.description || '')}</div>
+              <div class="meta">
+                <span>${escapeHtml(it.category || 'archive')}</span>
+                <span>${fmtBytes(it.size_bytes || 0)}</span>
+                ${it.article_count && it.article_count > 1000 ? `<span>${(it.article_count >= 1e6 ? (it.article_count/1e6).toFixed(1)+'M' : (it.article_count/1e3).toFixed(0)+'K')} articles</span>` : ''}
+              </div>
+            </a>
+          `;
+        }).join('') + '</div>';
+      } catch (e) {
+        wrap.innerHTML = `<div class="lib-error">Failed to load library: ${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    loadLibrary();
+  </script>
+</body>
+</html>

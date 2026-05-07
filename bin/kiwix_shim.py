@@ -554,7 +554,39 @@ class Handler(BaseHTTPRequestHandler):
             if path.startswith('/content/'):
                 return self._content(path[len('/content/'):])
             if path.startswith('/viewer'):
-                # Match kiwix-serve URL convention: /viewer#<book>/<entry>
+                # /viewer?book=<kiwix_name_prefix>  -> find matching archive
+                # and 302 to /content/<full_key>/<main_entry>. Falls back to
+                # the old behaviour (list of books) when no book param is set.
+                book_param = (qs.get('book') or [''])[0].strip()
+                if book_param:
+                    # Match by exact key first, then by prefix (so callers can
+                    # pass either 'wikipedia_en_all_maxi_2026-02' or just
+                    # 'wikipedia_en_all_maxi').
+                    full_key = None
+                    if book_param in ARCHIVES:
+                        full_key = book_param
+                    else:
+                        for k in ARCHIVES.keys():
+                            if k.startswith(book_param):
+                                full_key = k
+                                break
+                    if full_key is None:
+                        self._json(404, {
+                            'error': 'no installed ZIM matches that book name',
+                            'requested': book_param,
+                            'installed': list(ARCHIVES.keys()),
+                        })
+                        return
+                    archive = ARCHIVES[full_key]
+                    try:
+                        main = archive.main_entry.get_item().path
+                    except Exception:
+                        main = 'index.html'
+                    target = f'/content/{full_key}/{main}'
+                    self.send_response(302)
+                    self.send_header('Location', target)
+                    self.end_headers()
+                    return
                 return self._index()
             self._json(404, {"error": "not found", "path": path})
         except Exception as e:

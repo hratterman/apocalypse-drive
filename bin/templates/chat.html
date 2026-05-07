@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Apocalypse · Raw LLM Chat</title>
+<link rel="stylesheet" href="/static/apocalypse-theme.css" />
+<style>
+  /* Chat-specific layout on top of the shared theme. */
+  .chat-page main {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px 24px 32px;
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 100px);
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin: 8px 0 18px;
+  }
+  .nav-links a {
+    color: var(--text-bright);
+    text-decoration: none;
+    text-transform: var(--button-text-transform);
+    letter-spacing: var(--button-letter-spacing);
+    font-size: 13px;
+  }
+  .nav-links a:hover { color: var(--text); }
+
+  .chat-info {
+    color: var(--text-dim);
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    border: 1px dashed var(--border);
+    border-radius: var(--border-radius);
+  }
+  .chat-info code {
+    background: var(--panel);
+    padding: 1px 6px;
+    border-radius: 2px;
+    color: var(--text-bright);
+    font-size: 12px;
+  }
+  .chat-warn {
+    color: var(--warn);
+    margin-top: 6px;
+    display: none;
+  }
+
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    padding: 14px 16px;
+    border-radius: var(--border-radius);
+    margin-bottom: 14px;
+    min-height: 320px;
+    font-family: var(--font-stack);
+  }
+
+  .msg {
+    margin: 0 0 14px;
+    padding: 10px 14px;
+    border-radius: var(--border-radius);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  .msg.user {
+    background: var(--bg-glow);
+    border-left: 3px solid var(--text-bright);
+    color: var(--text);
+  }
+  .msg.user::before {
+    content: '> you' attr(data-prefix);
+    display: block;
+    color: var(--text-faint);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+
+  .msg.assistant {
+    background: transparent;
+    border-left: 3px solid var(--text-dim);
+    color: var(--text);
+  }
+  .msg.assistant::before {
+    content: '> llm';
+    display: block;
+    color: var(--text-faint);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+
+  .msg.system {
+    background: transparent;
+    color: var(--text-dim);
+    font-style: italic;
+    border-left: 3px solid var(--border);
+  }
+  .msg.error {
+    color: var(--warn);
+    border-left: 3px solid var(--warn);
+  }
+
+  form.compose {
+    display: flex;
+    gap: 10px;
+  }
+  form.compose textarea {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-stack);
+    font-size: var(--font-size);
+    padding: 10px 12px;
+    border-radius: var(--border-radius);
+    resize: vertical;
+    min-height: 56px;
+    max-height: 240px;
+    outline: none;
+  }
+  form.compose textarea:focus { border-color: var(--text-bright); }
+
+  form.compose button {
+    background: var(--bg);
+    border: 1px solid var(--text-bright);
+    color: var(--text-bright);
+    font-family: var(--font-stack);
+    font-size: var(--font-size);
+    padding: 10px 18px;
+    cursor: pointer;
+    text-transform: var(--button-text-transform);
+    letter-spacing: var(--button-letter-spacing);
+    border-radius: var(--border-radius);
+    align-self: flex-end;
+  }
+  form.compose button:hover:not(:disabled) {
+    background: var(--text-bright);
+    color: var(--bg);
+  }
+  form.compose button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+  .controls button {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 4px 10px;
+    font-family: var(--font-stack);
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: var(--border-radius);
+    text-transform: var(--button-text-transform);
+    letter-spacing: var(--button-letter-spacing);
+  }
+  .controls button:hover {
+    color: var(--text-bright);
+    border-color: var(--text-bright);
+  }
+
+  /* Geocities flair */
+  [data-theme="geocities"] .msg.user {
+    background: #ffff00 !important;
+    color: #000080 !important;
+    border: 3px ridge #ff00ff !important;
+  }
+  [data-theme="geocities"] .msg.assistant {
+    background: #c0c0c0 !important;
+    color: #000080 !important;
+    border: 3px ridge #00ffff !important;
+  }
+  [data-theme="geocities"] form.compose textarea {
+    background: #ffffff !important;
+    color: #000000 !important;
+    border: 2px inset #808080 !important;
+    font-family: 'Times New Roman', serif !important;
+  }
+  [data-theme="geocities"] form.compose button {
+    background: linear-gradient(180deg, #ff0000, #800000) !important;
+    color: #ffff00 !important;
+    border: 3px outset #ff8080 !important;
+    font-family: 'Comic Sans MS', cursive !important;
+  }
+</style>
+</head>
+<body class="chat-page" data-theme="terminal" data-crt="1">
+  <div class="crt-overlay"></div>
+
+  <header>
+    <h1>RAW LLM CHAT</h1>
+    <div id="themeSwitcher" class="theme-switcher">
+      <button data-set="terminal" title="Terminal (amber phosphor)"></button>
+      <button data-set="paper" title="Paper (calming, serif)"></button>
+      <button data-set="forest" title="Forest (quiet greens)"></button>
+      <button data-set="solarized" title="Solarized (gentle on eyes)"></button>
+      <button data-set="geocities" title="GEOCITIES 1997 ★"></button>
+    </div>
+  </header>
+
+  <main>
+    <div class="nav-links">
+      <a href="/">[ home ]</a>
+      <a href="/library">[ browse library ]</a>
+      <a href="/setup">[ add zims ]</a>
+      <a href="/admin">[ admin ]</a>
+    </div>
+
+    <div class="chat-info">
+      <strong>Direct conversation with the local LLM.</strong> No retrieval, no ZIM context, no internet. Whatever's running on <code id="llmEndpoint">localhost:8081</code> is what answers. Use the home page if you want the LLM grounded in your offline encyclopedias instead.
+      <div class="chat-warn" id="chatWarn">! LLM offline. Either the local model isn't running, or "No model" was chosen during setup. Reopen the wizard to install one.</div>
+    </div>
+
+    <div class="controls">
+      <span id="modelLabel">Model: detecting…</span>
+      <span style="flex: 1"></span>
+      <button type="button" id="clearBtn" title="Reset the conversation">[ clear ]</button>
+    </div>
+
+    <div class="messages" id="messages"></div>
+
+    <form class="compose" id="composeForm">
+      <textarea id="composeInput" placeholder="Type a message... (shift+enter for newline)" rows="2" autofocus></textarea>
+      <button type="submit" id="sendBtn">SEND</button>
+    </form>
+  </main>
+
+  <script src="/static/apocalypse-theme.js"></script>
+  <script>
+    const messagesEl = document.getElementById('messages');
+    const form = document.getElementById('composeForm');
+    const input = document.getElementById('composeInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const modelLabel = document.getElementById('modelLabel');
+    const chatWarn = document.getElementById('chatWarn');
+
+    // Auto-detect LLM endpoint. Try common llamafile/llama-server ports.
+    const LLM_CANDIDATES = ['8081', '8082', '8083', '18081'];
+    let LLM = null;
+    let MODEL_NAME = 'local';
+
+    function escapeHtml(s) {
+      return String(s || '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function append(role, text) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + role;
+      div.textContent = text;
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return div;
+    }
+
+    async function detectLLM() {
+      for (const p of LLM_CANDIDATES) {
+        try {
+          const r = await fetch(`http://localhost:${p}/v1/models`, { signal: AbortSignal.timeout(1500) });
+          if (r.ok) {
+            LLM = `http://localhost:${p}`;
+            try {
+              const j = await r.json();
+              const m = j.data && j.data[0];
+              if (m && m.id) MODEL_NAME = m.id;
+            } catch (_) {}
+            modelLabel.textContent = `Model: ${MODEL_NAME} (port ${p})`;
+            document.getElementById('llmEndpoint').textContent = `localhost:${p}`;
+            chatWarn.style.display = 'none';
+            return true;
+          }
+        } catch (_) {}
+      }
+      modelLabel.textContent = 'Model: offline';
+      chatWarn.style.display = 'block';
+      return false;
+    }
+
+    const conversation = []; // {role, content}
+
+    function snapshotConversation() {
+      try { sessionStorage.setItem('apoc-chat', JSON.stringify(conversation)); } catch (_) {}
+    }
+    function loadConversation() {
+      try {
+        const stored = sessionStorage.getItem('apoc-chat');
+        if (!stored) return;
+        const arr = JSON.parse(stored);
+        if (!Array.isArray(arr)) return;
+        for (const m of arr) {
+          conversation.push(m);
+          if (m.role === 'user' || m.role === 'assistant') {
+            append(m.role, m.content);
+          }
+        }
+      } catch (_) {}
+    }
+
+    clearBtn.addEventListener('click', () => {
+      conversation.length = 0;
+      messagesEl.innerHTML = '';
+      try { sessionStorage.removeItem('apoc-chat'); } catch (_) {}
+      append('system', 'Conversation cleared.');
+    });
+
+    async function sendMessage(text) {
+      if (!LLM) {
+        const ok = await detectLLM();
+        if (!ok) {
+          append('error', 'No LLM detected on ports 8081-8083 or 18081. Run the local model and try again.');
+          return;
+        }
+      }
+      conversation.push({ role: 'user', content: text });
+      append('user', text);
+      snapshotConversation();
+
+      sendBtn.disabled = true;
+      sendBtn.textContent = '…';
+      const respDiv = append('assistant', '');
+
+      const messages = [
+        { role: 'system', content: 'You are a helpful assistant running on a local offline machine. Be direct and concise.' },
+        ...conversation,
+      ];
+
+      let answer = '';
+      try {
+        const r = await fetch(LLM + '/v1/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: MODEL_NAME,
+            messages,
+            stream: true,
+            temperature: 0.5,
+            max_tokens: 1200,
+          }),
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+
+        const reader = r.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop();
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if (data === '[DONE]') break;
+            try {
+              const json = JSON.parse(data);
+              const delta = json.choices?.[0]?.delta?.content;
+              if (delta) {
+                answer += delta;
+                respDiv.textContent = answer;
+                messagesEl.scrollTop = messagesEl.scrollHeight;
+              }
+            } catch (_) {}
+          }
+        }
+
+        conversation.push({ role: 'assistant', content: answer });
+        snapshotConversation();
+      } catch (e) {
+        respDiv.classList.add('error');
+        respDiv.textContent = '! ' + e.message;
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'SEND';
+      }
+    }
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+      sendMessage(text);
+    });
+
+    // Shift+Enter for newline, Enter sends
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    loadConversation();
+    detectLLM();
+  </script>
+</body>
+</html>

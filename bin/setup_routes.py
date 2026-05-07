@@ -457,6 +457,44 @@ def dispatch_get(path, qs):
     if path == '/setup':
         body = _read_template('setup.html').encode('utf-8')
         return 200, [('Content-Type', 'text/html; charset=utf-8')], body
+    if path == '/library':
+        body = _read_template('library.html').encode('utf-8')
+        return 200, [('Content-Type', 'text/html; charset=utf-8')], body
+    if path == '/chat':
+        body = _read_template('chat.html').encode('utf-8')
+        return 200, [('Content-Type', 'text/html; charset=utf-8')], body
+    if path.startswith('/static/'):
+        # Serve static assets (CSS, JS) from bin/static/. Also covers
+        # PyInstaller bundles by checking _MEIPASS first.
+        rel = path[len('/static/'):]
+        if not rel or '..' in rel.split('/'):
+            return 404, [('Content-Type', 'text/plain')], b'not found'
+        candidates = []
+        meipass = getattr(sys, '_MEIPASS', None)
+        if meipass:
+            candidates.append(Path(meipass) / 'static' / rel)
+        here = Path(__file__).parent
+        candidates.append(here / 'static' / rel)
+        for cand in candidates:
+            try:
+                if cand.exists() and cand.is_file():
+                    data = cand.read_bytes()
+                    ct = 'application/octet-stream'
+                    if rel.endswith('.css'):
+                        ct = 'text/css; charset=utf-8'
+                    elif rel.endswith('.js'):
+                        ct = 'application/javascript; charset=utf-8'
+                    elif rel.endswith('.svg'):
+                        ct = 'image/svg+xml'
+                    elif rel.endswith('.png'):
+                        ct = 'image/png'
+                    return 200, [
+                        ('Content-Type', ct),
+                        ('Cache-Control', 'public, max-age=300'),
+                    ], data
+            except Exception:
+                continue
+        return 404, [('Content-Type', 'text/plain')], b'not found'
     if path == '/' or path == '/index.html':
         # First-run UX: if setup hasn't been completed yet, redirect to the
         # wizard. Otherwise serve the polished Apocalypse.html landing page
@@ -521,7 +559,7 @@ def dispatch_get(path, qs):
             'theme': st.get('theme', 'terminal'),
             'model': st.get('model', '3b'),
             'disk': disk_for(_INSTALL_DIR),
-            'version': '1.2.0',
+            'version': '1.2.1',
             'author': 'Henry Ratterman',
             'author_url': 'https://henryratterman.com',
         })
