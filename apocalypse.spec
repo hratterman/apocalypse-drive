@@ -65,7 +65,7 @@ print(f"[apocalypse.spec] libzim binaries: {len(binaries)}")
 for b in binaries:
     print(f"  {b[0]} -> {b[1]}")
 
-# Hidden imports: pystray / PIL backends + libzim's runtime imports
+# Hidden imports: rumps (macOS) / pystray (Win+Linux) / PIL backends + libzim runtime
 hiddenimports = [
     'libzim',
     'libzim.reader',
@@ -77,13 +77,29 @@ hiddenimports = [
     'kiwix_opds',          # imported dynamically by setup_routes
     'certifi',             # SSL cert bundle for HTTPS downloads
     'ssl',
-    'pystray._darwin',     # macOS
-    'pystray._win32',      # Windows
-    'pystray._gtk',        # Linux GTK
-    'pystray._appindicator',  # Linux GNOME
-    'pystray._xorg',       # Linux X11 fallback
     'PIL._tkinter_finder',
 ]
+
+if sys.platform == 'darwin':
+    # rumps + its PyObjC deps. PyInstaller's pyobjc hook usually catches the
+    # frameworks, but we explicitly list rumps' top-level dependencies so a
+    # cold cache build doesn't drop them.
+    hiddenimports += [
+        'rumps',
+        'AppKit',
+        'Foundation',
+        'objc',
+        'PyObjCTools.AppHelper',
+    ]
+else:
+    # pystray's per-platform backends. PyInstaller can't see these because
+    # pystray imports them dynamically based on sys.platform.
+    hiddenimports += [
+        'pystray._win32',         # Windows
+        'pystray._gtk',           # Linux GTK
+        'pystray._appindicator',  # Linux GNOME
+        'pystray._xorg',          # Linux X11 fallback
+    ]
 
 a = Analysis(
     [str(ROOT / 'bin' / 'apocalypse_tray.py')],

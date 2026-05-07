@@ -28,7 +28,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller pystray Pillow libzim certifi
+          # macOS uses rumps for the menu-bar UI (pystray's macOS backend
+          # silently hangs inside a PyInstaller .app — see v1.3.3 fix).
+          pip install pyinstaller rumps Pillow libzim certifi
 
       - name: Build icons
         run: python scripts/build_icons.py

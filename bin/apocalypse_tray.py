@@ -9,8 +9,14 @@ What it does:
   - Polls the shim every 5s to update the icon (green=ok, yellow=downloading, red=down)
 
 Dependencies:
-  pystray >= 0.19    (cross-platform tray)
-  Pillow             (icon rendering)
+  macOS:           rumps >= 0.4         (native menu-bar app via PyObjC)
+  Windows/Linux:   pystray >= 0.19      (cross-platform tray)
+  All platforms:   Pillow               (icon rendering)
+
+Why two libraries: pystray's macOS backend is unreliable inside a PyInstaller
+.app — Icon.run() enters NSRunLoop and silently hangs with no logs and no UI.
+rumps is the standard macOS-native menu-bar library used by countless shipped
+.app bundles, and its rumps.quit_application() actually exits the process.
 
 When packaged via PyInstaller, both ship inside the .app/.exe.
 
@@ -41,12 +47,26 @@ import webbrowser
 from pathlib import Path
 
 try:
-    import pystray
-    from pystray import MenuItem, Menu
     from PIL import Image, ImageDraw
 except ImportError:
-    print("ERROR: pystray and Pillow required. Install with: pip install pystray Pillow", file=sys.stderr)
+    print("ERROR: Pillow required. Install with: pip install Pillow", file=sys.stderr)
     sys.exit(1)
+
+# Platform-specific menu-bar / tray library
+_USE_RUMPS = sys.platform == 'darwin'
+if _USE_RUMPS:
+    try:
+        import rumps
+    except ImportError:
+        print("ERROR: rumps required on macOS. Install with: pip install rumps", file=sys.stderr)
+        sys.exit(1)
+else:
+    try:
+        import pystray
+        from pystray import MenuItem, Menu
+    except ImportError:
+        print("ERROR: pystray required. Install with: pip install pystray", file=sys.stderr)
+        sys.exit(1)
 
 
 # ---- Early launch log ------------------------------------------------------
@@ -54,7 +74,17 @@ except ImportError:
 # hangs or crashes during startup (e.g. a wedged USB drive blocking stat() on
 # /Volumes), there's no way to diagnose without this log. Write progress to a
 # known location starting from line 1.
-_LAUNCH_LOG_PATH = Path.home() / '.apocalypse_launch.log'
+#
+# Critical detail: when the parent tray spawns its shim subprocess via
+# sys.executable inside a PyInstaller bundle, the child re-runs THIS module
+# with --run-shim. If both processes share one log file, the child's
+# write_text() at startup wipes the parent's lines — including any FATAL
+# traceback. So the child writes to a separate file.
+_IS_SHIM_CHILD = len(sys.argv) > 1 and sys.argv[1] == '--run-shim'
+if _IS_SHIM_CHILD:
+    _LAUNCH_LOG_PATH = Path.home() / '.apocalypse_shim_launch.log'
+else:
+    _LAUNCH_LOG_PATH = Path.home() / '.apocalypse_launch.log'
 
 def _llog(msg):
     try:
@@ -66,7 +96,7 @@ def _llog(msg):
 
 # Truncate previous log on each launch so it stays readable
 try:
-    _LAUNCH_LOG_PATH.write_text(f"=== Apocalypse launch {time.strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()} ===\n", encoding='utf-8')
+    _LAUNCH_LOG_PATH.write_text(f"=== Apocalypse launch {time.strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()} role={'shim-child' if _IS_SHIM_CHILD else 'tray-parent'} ===\n", encoding='utf-8')
 except Exception:
     pass
 _llog(f"argv={sys.argv} platform={sys.platform} python={sys.version.split()[0]}")
@@ -530,6 +560,20 @@ def make_icon(color='gray'):
     return img
 
 
+def write_icon_png(color, dest_dir):
+    """Write a colored icon PNG to dest_dir and return its absolute path.
+
+    rumps takes an icon path (not an in-memory PIL image), so we materialize
+    each color variant once at startup and reuse the path on icon updates.
+    """
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    p = dest_dir / f"apocalypse_{color}.png"
+    if not p.exists():
+        make_icon(color).save(p)
+    return str(p)
+
+
 # ---- Main app --------------------------------------------------------------
 
 class ApocalypseApp:
@@ -541,6 +585,10 @@ class ApocalypseApp:
         self.llama = LlamaServerManager(self.install_dir)
         self.icon = None
         self.last_health = None
+        # Used by ApocalypseRumpsApp's tick handler to fire the wizard auto-open
+        # exactly once. The pystray path uses its own first_check local in
+        # health_loop, so this attribute is harmless on Win/Linux.
+        self._first_check_done = False
 
         # Belt-and-suspenders cleanup: no matter how this process dies (menu
         # Quit, Force Quit, parent crash, SIGTERM from launchd), all child
@@ -665,14 +713,11 @@ class ApocalypseApp:
             time.sleep(5.0)
 
     def run(self):
-        # Start the shim
+        # NB: shim and llama are now started by __main__ before this is called
+        # (so the same startup path works for both rumps and pystray UIs).
+        # ShimManager.start() short-circuits if already running, so this is a
+        # safe no-op if the caller already spun things up.
         self.shim.start()
-
-        # Start the LLM server in the background. Non-blocking: if no model
-        # is installed yet (first run), this is a silent no-op. The wizard
-        # downloads a .llamafile, then the user reopens the app and the LLM
-        # boots automatically. We could also restart it after a successful
-        # LLM download, but a tray relaunch is simpler and equally reliable.
         threading.Thread(target=self.llama.start, daemon=True).start()
 
         # Build the tray icon
@@ -689,6 +734,103 @@ class ApocalypseApp:
 
         # This blocks until quit
         self.icon.run()
+
+
+# ---- macOS rumps wrapper ---------------------------------------------------
+# rumps.App must run on the main thread and uses Cocoa's NSRunLoop. It does
+# NOT play well with pystray's icon API, but it's the only reliable path on
+# macOS. We compose ApocalypseApp for the shared shim/menu-action logic and
+# wrap it in a rumps.App subclass for the UI.
+
+if _USE_RUMPS:
+    class ApocalypseRumpsApp(rumps.App):
+        def __init__(self, core):
+            self.core = core  # ApocalypseApp instance (shim, llama, actions)
+            # Pre-render every color variant once. rumps takes a path, not a
+            # PIL image, so we materialize PNGs in the install dir's logs/
+            # subfolder (writable on every platform we care about).
+            icon_dir = self.core.install_dir / 'logs' / 'icons'
+            self._icon_paths = {
+                c: write_icon_png(c, icon_dir)
+                for c in ('gray', 'green', 'yellow', 'red', 'orange')
+            }
+            super().__init__(
+                'Apocalypse',
+                title=None,
+                icon=self._icon_paths['yellow'],
+                template=False,         # full-color icon, not B&W template
+                quit_button=None,       # we install our own Quit
+            )
+            self._build_menu()
+
+        # Wrap each core action in a rumps callback signature
+        def _wrap(self, fn):
+            def _cb(_sender):
+                try:
+                    fn()
+                except Exception as e:
+                    _llog(f"menu action error: {type(e).__name__}: {e}")
+            return _cb
+
+        def _build_menu(self):
+            self.menu.clear()
+            health = self.core.shim.health()
+            self.menu = [
+                rumps.MenuItem(f'Status: {health}', callback=None),
+                None,  # separator
+                rumps.MenuItem('Open Apocalypse', callback=self._wrap(lambda: self.core.open_main())),
+                rumps.MenuItem('Library',         callback=self._wrap(lambda: self.core.open_library())),
+                rumps.MenuItem('Setup Wizard',    callback=self._wrap(lambda: self.core.open_setup())),
+                None,
+                rumps.MenuItem('Restart Service',     callback=self._wrap(lambda: self.core.restart_service())),
+                rumps.MenuItem('View Logs',           callback=self._wrap(lambda: self.core.show_logs())),
+                rumps.MenuItem('Show Install Folder', callback=self._wrap(lambda: self.core.show_install_dir())),
+                None,
+                rumps.MenuItem('About Apocalypse', callback=self._wrap(lambda: self.core.open_about())),
+                rumps.MenuItem('henryratterman.com', callback=self._wrap(lambda: self.core.open_website())),
+                rumps.MenuItem('GitHub Repo', callback=self._wrap(lambda: self.core.open_github())),
+                None,
+                rumps.MenuItem('Quit', callback=self._on_quit),
+            ]
+
+        def _on_quit(self, _sender):
+            try:
+                self.core.llama.stop()
+                self.core.shim.stop()
+            finally:
+                # rumps.quit_application() actually exits the NSRunLoop.
+                # We don't trust pystray-style icon.stop() here because it's
+                # exactly what was hanging on Henry's MacBook.
+                rumps.quit_application()
+
+        # rumps' built-in repeating timer. Must use this rather than a raw
+        # thread because UI updates need to come from the main thread.
+        @rumps.timer(5)
+        def _tick(self, _sender):
+            try:
+                health = self.core.shim.health()
+                color_map = {
+                    'down': 'red',
+                    'starting': 'yellow',
+                    'ready': 'green',
+                    'downloading': 'orange',
+                }
+                desired = color_map.get(health, 'gray')
+                if health != self.core.last_health:
+                    self.core.last_health = health
+                    self.icon = self._icon_paths[desired]
+                    self._build_menu()
+
+                # First-run auto-open of the wizard
+                if not self.core._first_check_done and health == 'ready':
+                    self.core._first_check_done = True
+                    if not self.core.shim.setup_complete():
+                        webbrowser.open(self.core.url('/setup'))
+                    else:
+                        # Already set up — open main page so user lands somewhere useful
+                        webbrowser.open(self.core.url('/'))
+            except Exception as e:
+                _llog(f"tick error: {type(e).__name__}: {e}")
 
 
 if __name__ == '__main__':
@@ -716,10 +858,29 @@ if __name__ == '__main__':
 
     _llog("constructing ApocalypseApp")
     app = None
+    rumps_app = None
     try:
         app = ApocalypseApp()
-        _llog("ApocalypseApp constructed, calling run()")
-        app.run()
+        _llog(f"ApocalypseApp constructed, install_dir={app.install_dir} code_dir={app.code_dir}")
+
+        # Start the shim (and LLM in the background) before any UI runs. The
+        # rumps NSRunLoop blocks the main thread, so spinning these up early
+        # is essential.
+        _llog("starting shim subprocess")
+        app.shim.start()
+        _llog(f"shim pid={getattr(app.shim.process, 'pid', None)}")
+        threading.Thread(target=app.llama.start, daemon=True).start()
+
+        if _USE_RUMPS:
+            _llog("constructing ApocalypseRumpsApp (macOS)")
+            rumps_app = ApocalypseRumpsApp(app)
+            _llog("ApocalypseRumpsApp ready, entering rumps run loop")
+            rumps_app.run()
+            _llog("rumps run loop exited")
+        else:
+            _llog("entering pystray run loop (Win/Linux)")
+            app.run()
+            _llog("pystray run loop exited")
     except KeyboardInterrupt:
         if app is not None:
             app.quit_app()
@@ -727,4 +888,8 @@ if __name__ == '__main__':
         import traceback
         _llog(f"FATAL: {type(e).__name__}: {e}")
         _llog(traceback.format_exc())
+        # Re-raise only if we still have stdio (running from terminal). When
+        # launched as a bundled .app there's no stdout, but raising would
+        # cause Python's default handler to abort with no user feedback. The
+        # log file is the user feedback.
         raise
