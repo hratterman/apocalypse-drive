@@ -580,30 +580,54 @@ def downloads_snapshot():
 
 # --- HTML pages -------------------------------------------------------------
 
+def _resource_root():
+    """Return the directory that contains bin/templates/, bin/static/, data/.
+
+    Resolution order:
+      1. sys._MEIPASS  -> PyInstaller bundle (Win/Linux: bundle root,
+         macOS .app: Contents/Resources/ which is where datas land).
+      2. <bin>/.. when running from source (repo root).
+
+    On macOS .app bundles, code lives under Contents/Frameworks/bin/ but data
+    files (templates, static, catalog.json, Apocalypse.html) live under
+    Contents/Resources/. Path(__file__).parent is wrong; sys._MEIPASS is right.
+    """
+    meipass = getattr(sys, '_MEIPASS', None)
+    if meipass:
+        return Path(meipass)
+    return Path(__file__).resolve().parent.parent
+
+
 def _read_template(name):
-    """Load HTML template from same dir as this module."""
-    here = Path(__file__).parent
-    p = here / 'templates' / name
-    return p.read_text(encoding='utf-8')
+    """Load HTML template from the bundle resource root.
+
+    Templates live at <resource_root>/bin/templates/<name>.
+    """
+    candidates = [
+        _resource_root() / 'bin' / 'templates' / name,
+        Path(__file__).resolve().parent / 'templates' / name,  # source-mode fallback
+    ]
+    for p in candidates:
+        if p.exists():
+            return p.read_text(encoding='utf-8')
+    raise FileNotFoundError(
+        f"template {name!r} not found in {[str(c) for c in candidates]}"
+    )
 
 
 def _read_landing_page():
     """Load Apocalypse.html (the polished landing page) from the bundle.
 
-    Search order (PyInstaller / source / dev all covered):
-      1. sys._MEIPASS/Apocalypse.html         (PyInstaller bundle root)
-      2. <bin parent>/Apocalypse.html         (source repo root)
-      3. bin/templates/Apocalypse.html        (fallback if we move it later)
+    Apocalypse.html is bundled at the resource root (spec line 60).
 
     Returns None if not found, so callers can fall back to a stub.
     """
-    candidates = []
-    meipass = getattr(sys, '_MEIPASS', None)
-    if meipass:
-        candidates.append(Path(meipass) / 'Apocalypse.html')
-    here = Path(__file__).parent
-    candidates.append(here.parent / 'Apocalypse.html')
-    candidates.append(here / 'templates' / 'Apocalypse.html')
+    here = Path(__file__).resolve().parent
+    candidates = [
+        _resource_root() / 'Apocalypse.html',
+        here.parent / 'Apocalypse.html',           # source repo root
+        here / 'templates' / 'Apocalypse.html',     # last-ditch fallback
+    ]
     for p in candidates:
         try:
             if p.exists():
@@ -630,17 +654,16 @@ def dispatch_get(path, qs):
         body = _read_template('chat.html').encode('utf-8')
         return 200, [('Content-Type', 'text/html; charset=utf-8')], body
     if path.startswith('/static/'):
-        # Serve static assets (CSS, JS) from bin/static/. Also covers
-        # PyInstaller bundles by checking _MEIPASS first.
+        # Serve static assets (CSS, JS) from bin/static/. Resolves correctly
+        # in source mode AND PyInstaller bundles (including macOS .app where
+        # data files land in Contents/Resources/).
         rel = path[len('/static/'):]
         if not rel or '..' in rel.split('/'):
             return 404, [('Content-Type', 'text/plain')], b'not found'
-        candidates = []
-        meipass = getattr(sys, '_MEIPASS', None)
-        if meipass:
-            candidates.append(Path(meipass) / 'static' / rel)
-        here = Path(__file__).parent
-        candidates.append(here / 'static' / rel)
+        candidates = [
+            _resource_root() / 'bin' / 'static' / rel,
+            Path(__file__).resolve().parent / 'static' / rel,  # source-mode fallback
+        ]
         for cand in candidates:
             try:
                 if cand.exists() and cand.is_file():
