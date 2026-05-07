@@ -1,0 +1,242 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'           # v1.0.0, v1.2.3-beta, etc.
+  workflow_dispatch:   # Manual trigger from GitHub UI
+    inputs:
+      release_tag:
+        description: 'Release tag (e.g. v1.0.0). Leave blank to skip release upload.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write       # Needed to create releases
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pystray Pillow libzim
+
+      - name: Build icons
+        run: python scripts/build_icons.py
+
+      - name: Build .app
+        run: pyinstaller --noconfirm --clean apocalypse.spec
+
+      - name: Verify .app
+        run: |
+          test -d "dist/Apocalypse.app" || (echo ".app missing"; exit 1)
+          ls -la dist/Apocalypse.app/Contents/MacOS/
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Build DMG
+        run: |
+          mkdir -p release
+          create-dmg \
+            --volname "Apocalypse" \
+            --volicon assets/icon.icns \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 128 \
+            --icon "Apocalypse.app" 175 190 \
+            --hide-extension "Apocalypse.app" \
+            --app-drop-link 425 190 \
+            --no-internet-enable \
+            "release/Apocalypse-macOS.dmg" \
+            "dist/Apocalypse.app" \
+            || true   # create-dmg sometimes returns non-zero on success
+          ls -la release/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apocalypse-macos
+          path: release/Apocalypse-macOS.dmg
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pystray Pillow libzim
+
+      - name: Build icons
+        run: python scripts/build_icons.py
+
+      - name: Build .exe
+        run: pyinstaller --noconfirm --clean apocalypse.spec
+
+      - name: Verify .exe
+        run: |
+          if (-not (Test-Path "dist/Apocalypse/Apocalypse.exe")) {
+            Write-Error ".exe missing"
+            exit 1
+          }
+          Get-ChildItem dist/Apocalypse | Select-Object -First 10
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Create installer script
+        run: |
+          @"
+          [Setup]
+          AppName=Apocalypse
+          AppVersion=1.0.0
+          AppPublisher=hratterman
+          AppPublisherURL=https://github.com/hratterman/apocalypse-drive
+          DefaultDirName={autopf}\Apocalypse
+          DefaultGroupName=Apocalypse
+          DisableProgramGroupPage=yes
+          OutputDir=release
+          OutputBaseFilename=Apocalypse-Windows-Setup
+          SetupIconFile=assets\icon.ico
+          Compression=lzma2
+          SolidCompression=yes
+          ArchitecturesInstallIn64BitMode=x64
+          PrivilegesRequired=lowest
+
+          [Files]
+          Source: "dist\Apocalypse\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs
+
+          [Icons]
+          Name: "{group}\Apocalypse"; Filename: "{app}\Apocalypse.exe"
+          Name: "{commondesktop}\Apocalypse"; Filename: "{app}\Apocalypse.exe"; Tasks: desktopicon
+
+          [Tasks]
+          Name: desktopicon; Description: "Create a desktop icon"; GroupDescription: "Additional icons:"
+
+          [Run]
+          Filename: "{app}\Apocalypse.exe"; Description: "Launch Apocalypse"; Flags: nowait postinstall skipifsilent
+          "@ | Out-File -FilePath "installer.iss" -Encoding utf8
+
+      - name: Build installer
+        run: |
+          mkdir release -ErrorAction SilentlyContinue
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer.iss
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apocalypse-windows
+          path: release/Apocalypse-Windows-Setup.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install system deps for pystray
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev libgirepository1.0-dev gir1.2-appindicator3-0.1 \
+            libcairo2-dev pkg-config
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pystray Pillow libzim PyGObject
+
+      - name: Build icons
+        run: python scripts/build_icons.py
+
+      - name: Build binary
+        run: pyinstaller --noconfirm --clean apocalypse.spec
+
+      - name: Package as tarball (poor man's AppImage)
+        run: |
+          mkdir -p release
+          cd dist && tar czf ../release/Apocalypse-Linux-x86_64.tar.gz Apocalypse/
+          cd ..
+          ls -la release/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apocalypse-linux
+          path: release/Apocalypse-Linux-x86_64.tar.gz
+
+  release:
+    needs: [build-macos, build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release_tag != ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+
+      - name: List downloaded artifacts
+        run: find release -type f | sort
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event.inputs.release_tag }}" != "" ]; then
+            echo "tag=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Apocalypse ${{ steps.tag.outputs.tag }}
+          body: |
+            ## Apocalypse ${{ steps.tag.outputs.tag }}
+
+            Self-contained offline knowledge library with built-in RAG.
+
+            ### Downloads
+            - **macOS**: `Apocalypse-macOS.dmg` (Intel + Apple Silicon)
+            - **Windows**: `Apocalypse-Windows-Setup.exe`
+            - **Linux**: `Apocalypse-Linux-x86_64.tar.gz`
+
+            ### First run
+            Open the app. The setup wizard pops up in your browser. Pick a starter pack (Survival, Student, Developer) or choose individual ZIMs. Downloads stream in the background. When it's done you have an offline copy of Wikipedia, Khan Academy, Stack Overflow, and more.
+
+            ### Notes
+            - macOS: first launch hits Gatekeeper ("unidentified developer"). Right-click the app, choose Open, confirm. Once.
+            - Windows: SmartScreen may flash a warning. Click "More info" then "Run anyway".
+            - Linux: untar and run `./Apocalypse/Apocalypse`.
+
+            See README for full docs.
+          files: |
+            release/apocalypse-macos/Apocalypse-macOS.dmg
+            release/apocalypse-windows/Apocalypse-Windows-Setup.exe
+            release/apocalypse-linux/Apocalypse-Linux-x86_64.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

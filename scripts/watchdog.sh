@@ -24,7 +24,7 @@ if [ "$incomplete" = "0" ]; then
     [ ! -f "$ZIM_DIR/$z" ] && missing=$((missing+1))
   done
   if [ "$missing" = "0" ]; then
-    # Nothing to do — stay quiet
+    # Nothing to do, stay quiet
     exit 0
   fi
 fi
@@ -39,7 +39,7 @@ if pgrep -f "curl.*Volumes/Media/apocalypse/kiwix" >/dev/null; then
   exit 0
 fi
 
-# Stalled — restart
+# Stalled, restart
 echo "[$(ts)] no downloader running with incomplete files, restarting" >> "$LOG"
 nohup bash "$SCRIPT" >> /Volumes/Media/apocalypse/kiwix/download.out 2>&1 &
 disown

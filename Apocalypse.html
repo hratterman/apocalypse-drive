@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Apocalypse — Offline Knowledge</title>
+<title>Apocalypse · Offline Knowledge</title>
 <style>
   /* =====================================================================
-     Apocalypse — themeable interface
+     Apocalypse: themeable interface
      Default theme is "terminal" (amber phosphor on black, CRT effects).
      Other themes (paper, forest, solarized) drop the CRT effects in
      favor of calm, comfortable reading.
@@ -128,9 +128,9 @@
     --border-radius: 0;
   }
 
-  /* Geocities-specific overrides — lots of them */
+  /* Geocities-specific overrides (lots of them) */
   [data-theme="geocities"] body {
-    /* Tiled "stars" background — base64 SVG of yellow stars on navy */
+    /* Tiled "stars" background: base64 SVG of yellow stars on navy */
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'><rect width='80' height='80' fill='%23000080'/><text x='10' y='20' fill='%23ffff00' font-family='serif' font-size='14'>★</text><text x='50' y='40' fill='%23ffffff' font-family='serif' font-size='10'>✦</text><text x='25' y='65' fill='%23ff00ff' font-family='serif' font-size='12'>✧</text><text x='65' y='75' fill='%2300ffff' font-family='serif' font-size='8'>✦</text></svg>") !important;
     background-attachment: fixed !important;
     background-repeat: repeat !important;
@@ -242,7 +242,7 @@
   }
   [data-theme="geocities"] .citation .source { color: #008000 !important; }
 
-  /* Marquee scrolling text — pure CSS, no <marquee> tag needed */
+  /* Marquee scrolling text (pure CSS, no <marquee> tag needed) */
   [data-theme="geocities"] .geocities-marquee {
     display: block;
     background: #ffff00;
@@ -315,7 +315,25 @@
   @keyframes blinkText { 50% { opacity: 0; } }
   body:not([data-theme="geocities"]) .geocities-footer { display: none; }
 
-  /* Hide the ASCII banner & title-block on geocities theme — we have our own */
+  /* Apocalypse credits footer (visible on every theme except geocities) */
+  .apoc-footer {
+    margin-top: 60px; padding: 22px 28px; text-align: center;
+    font-size: 12px; color: var(--muted, #6b7280);
+    border-top: 1px solid var(--border, rgba(127,127,127,0.2));
+    opacity: 0.75;
+  }
+  .apoc-footer a { color: inherit; text-decoration: none; transition: color 0.15s; }
+  .apoc-footer a:hover { color: var(--accent, #ffa940); }
+  .apoc-footer .dot { margin: 0 8px; opacity: 0.5; }
+  body[data-theme="geocities"] .apoc-footer { display: none; }
+  /* Terminal theme: subtle amber tint */
+  body[data-theme="terminal"] .apoc-footer { color: rgba(255,179,71,0.55); }
+  body[data-theme="terminal"] .apoc-footer a:hover { color: #ffb347; }
+  /* Paper theme: warm muted brown */
+  body[data-theme="paper"] .apoc-footer { color: rgba(74,60,40,0.55); }
+  body[data-theme="paper"] .apoc-footer a:hover { color: #6b4f2a; }
+
+  /* Hide the ASCII banner & title-block on geocities theme (we have our own) */
   [data-theme="geocities"] .banner { display: none !important; }
   [data-theme="geocities"] .title-block { display: none !important; }
 
@@ -470,7 +488,7 @@
     padding: 32px 24px;
   }
 
-  /* ASCII banner — only show on terminal theme */
+  /* ASCII banner (only show on terminal theme) */
   .banner {
     color: var(--text-dim);
     font-size: 10px;
@@ -710,7 +728,7 @@
     color: var(--text-dim);
   }
 
-  body:not([data-theme="terminal"]) .citation::before { content: '— '; }
+  body:not([data-theme="terminal"]) .citation::before { content: '» '; }
 
   .err {
     color: var(--warn);
@@ -808,6 +826,15 @@
   </div>
 </main>
 
+<!-- Footer with credits (hidden on geocities since that theme has its own cheesy footer) -->
+<footer class="apoc-footer">
+  <span>Built by <a href="/about">Henry Ratterman</a></span>
+  <span class="dot">·</span>
+  <span><a href="https://henryratterman.com" target="_blank" rel="noopener">henryratterman.com</a></span>
+  <span class="dot">·</span>
+  <span><a href="https://github.com/hratterman/apocalypse-drive" target="_blank" rel="noopener">GitHub</a></span>
+</footer>
+
 <script>
 const urlParams = new URLSearchParams(location.search);
 
@@ -862,7 +889,7 @@ document.getElementById('themeSwitcher').addEventListener('click', (e) => {
 });
 
 
-// Defaults are 8888/8081 — but on Mac the launcher may have picked alternate
+// Defaults are 8888/8081, but on Mac the launcher may have picked alternate
 // ports (8890+) when 8888 was taken by another service like Docker. Probe
 // candidates so a forgotten ?kiwix= param doesn't silently route you to the
 // wrong server.
@@ -902,7 +929,7 @@ async function autoDetectPorts() {
       // Otherwise accept any kiwix-serve-like server as a fallback
       if (!KIWIX_PORT && (body.includes('wikipedia_en') || body.includes('content/'))) {
         KIWIX_PORT = p;
-        // Don't break — keep looking for the shim, which is preferred
+        // Don't break, keep looking for the shim, which is preferred
       }
     } catch (_) {}
   }
@@ -942,8 +969,8 @@ const askBtn = document.getElementById('askBtn');
 
 if (LLM_ONLY) {
   document.body.dataset.mode = 'llm-only';
-  qInput.placeholder = 'Ask anything (LLM only — Kiwix opens in its own window on Mac)';
-  answerEl.textContent = 'Ask the local LLM directly. On Mac the Kiwix library opens in its own desktop app — search articles there. On Linux and Windows this UI also pulls relevant articles into the answer.';
+  qInput.placeholder = 'Ask anything (LLM only, Kiwix opens in its own window on Mac)';
+  answerEl.textContent = 'Ask the local LLM directly. On Mac the Kiwix library opens in its own desktop app, search articles there. On Linux and Windows this UI also pulls relevant articles into the answer.';
 }
 
 async function checkServices() {

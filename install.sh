@@ -95,6 +95,14 @@ echo
 echo "  Host OS:    $HOST_OS / $HOST_ARCH"
 echo "  Install to: $INSTALL_DIR"
 echo
+echo "  ${BOLD}This is the headless / CLI installer.${RESET}"
+echo "  Most people want the GUI app instead:"
+echo "    ${AMBER}https://github.com/hratterman/apocalypse-drive/releases/latest${RESET}"
+echo
+echo "  The GUI gives you a setup wizard with checkboxes, live disk meter,"
+echo "  and a progress page. This script does everything from the terminal."
+echo "  Use this if you're on a server, Linux box without GUI, or just prefer it."
+echo
 echo "  This installer will:"
 echo "    1. Create the directory layout in the install path"
 echo "    2. Download kiwix-serve binaries for 5 platforms (~230 MB)"
@@ -373,4 +381,7 @@ case "$HOST_OS" in
 esac
 echo
 echo "  Or just double-click the appropriate launcher in Finder/Files."
+echo
+echo "  ${DIM}Built by Henry Ratterman · henryratterman.com${RESET}"
+echo "  ${DIM}github.com/hratterman/apocalypse-drive${RESET}"
 echo

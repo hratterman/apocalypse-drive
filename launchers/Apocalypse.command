@@ -1,5 +1,5 @@
 #!/bin/bash
-# Apocalypse launcher — macOS
+# Apocalypse launcher (macOS)
 # Uses a Python+libzim HTTP shim instead of kiwix-serve, because kiwix-serve
 # throws MMapException on macOS+exFAT. The shim is feature-equivalent for
 # what the RAG UI needs: /search returns hits, /content/<book>/<path> serves
@@ -22,7 +22,7 @@ fi
 if [ "$FORCE_3B" = "1" ] || [ "$DOWNLOADS_ACTIVE" = "1" ]; then
   if [ -f "$DRIVE/llm/Llama-3.2-3B-Instruct.Q6_K.llamafile" ]; then
     MODEL="$DRIVE/llm/Llama-3.2-3B-Instruct.Q6_K.llamafile"
-    MODEL_LABEL="Llama 3.2 3B (3B forced — downloads in progress or FORCE_3B=1)"
+    MODEL_LABEL="Llama 3.2 3B (3B forced: downloads in progress or FORCE_3B=1)"
   else
     echo "ERROR: 3B llamafile missing"; exit 1
   fi
@@ -68,7 +68,7 @@ echo "LLM port:   $LLM_PORT"
 echo ""
 
 # Pick a Python interpreter. Preference order:
-#   1) /usr/bin/python3 (Apple system Python — always present on macOS, and
+#   1) /usr/bin/python3 (Apple system Python: always present on macOS, and
 #      is the one we provisioned libzim into during testing)
 #   2) any python3 on PATH
 # This avoids picking up a Homebrew Python that doesn't have libzim.
@@ -86,7 +86,7 @@ echo "Python:     $PYTHON ($($PYTHON --version 2>&1))"
 # 1. Make sure libzim is installed into the chosen Python's user site-packages
 if ! "$PYTHON" -c "import libzim" 2>/dev/null; then
   echo "First-run: installing libzim Python binding ..."
-  # macOS Python 3.11+ enforces PEP 668 — need --break-system-packages with --user
+  # macOS Python 3.11+ enforces PEP 668: need --break-system-packages with --user
   # to install into the user's site-packages without touching system Python.
   if ! "$PYTHON" -m pip install --user --quiet libzim 2>/dev/null; then
     if ! "$PYTHON" -m pip install --user --break-system-packages --quiet libzim 2>/dev/null; then

@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apocalypse · Library</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #161922; --panel-2: #1d2230;
+    --border: #2a3142; --text: #e6e9ef; --muted: #8b95a8;
+    --accent: #ffa940; --accent-dim: #b67630;
+    --good: #4ade80; --warn: #fbbf24; --bad: #f87171;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 14px 28px; display: flex; align-items: center; gap: 16px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .topbar .logo {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 700; font-size: 17px; color: var(--accent); letter-spacing: 0.5px;
+  }
+  .topbar .nav { display: flex; gap: 4px; margin-left: 16px; }
+  .topbar .nav a {
+    padding: 6px 12px; border-radius: 6px; color: var(--muted);
+    text-decoration: none; font-size: 14px;
+  }
+  .topbar .nav a:hover { color: var(--text); background: var(--panel-2); }
+  .topbar .nav a.active { color: var(--text); background: var(--panel-2); }
+  .topbar .right { margin-left: auto; display: flex; gap: 14px; align-items: center; font-size: 13px; color: var(--muted); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); display: inline-block; }
+
+  .container { max-width: 1080px; margin: 0 auto; padding: 28px 28px 80px; }
+  h1 { font-size: 24px; margin: 0 0 6px; letter-spacing: -0.3px; }
+  .lede { color: var(--muted); margin: 0 0 24px; }
+
+  .stats-row {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px; margin-bottom: 24px;
+  }
+  .stat {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 16px;
+  }
+  .stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+  .stat .value { font-size: 22px; font-weight: 600; margin-top: 4px; }
+  .stat .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .stat .value.warn { color: var(--warn); }
+  .stat .value.good { color: var(--good); }
+
+  .section { margin-top: 32px; }
+  .section h2 {
+    font-size: 16px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); font-weight: 600; margin: 0 0 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .section h2 .actions { font-size: 13px; text-transform: none; letter-spacing: normal; }
+  .btn {
+    padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); font-size: 13px;
+    font-weight: 500; cursor: pointer; transition: background 0.1s;
+  }
+  .btn:hover { background: var(--border); }
+  .btn.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); font-weight: 600; }
+  .btn.danger { color: var(--bad); border-color: var(--bad); }
+  .btn.danger:hover { background: rgba(248,113,113,0.1); }
+
+  .lib-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .lib {
+    display: flex; gap: 14px; padding: 12px 14px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; align-items: center;
+  }
+  .lib .info { flex: 1; min-width: 0; }
+  .lib .title { font-weight: 600; }
+  .lib .sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .lib .size {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px; color: var(--accent); font-weight: 600;
+    flex-shrink: 0; margin-right: 8px;
+  }
+
+  .dl-row {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px; margin-bottom: 8px;
+  }
+  .dl-row .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .dl-row .name { font-weight: 500; }
+  .dl-row .stats { font-size: 12px; color: var(--muted); font-family: "SF Mono", Menlo, Consolas, monospace; }
+  .dl-bar { height: 6px; background: var(--panel-2); border-radius: 4px; margin-top: 8px; overflow: hidden; }
+  .dl-bar .fill { height: 100%; background: var(--accent); transition: width 0.3s; }
+  .dl-bar .fill.done { background: var(--good); }
+  .dl-bar .fill.error { background: var(--bad); }
+  .status.queued { color: var(--muted); }
+  .status.downloading { color: var(--accent); }
+  .status.done { color: var(--good); }
+  .status.error { color: var(--bad); }
+
+  .empty { color: var(--muted); font-style: italic; padding: 16px; text-align: center; }
+
+  .signature {
+    margin-top: 60px; padding: 20px 28px; text-align: center;
+    color: var(--muted); font-size: 12px;
+    border-top: 1px solid var(--border); background: var(--panel);
+  }
+  .signature a { color: var(--muted); text-decoration: none; transition: color 0.15s; }
+  .signature a:hover { color: var(--accent); }
+  .signature .dot { margin: 0 8px; opacity: 0.5; }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--accent);
+    color: var(--text); padding: 12px 20px; border-radius: 8px;
+    font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">APOCALYPSE</div>
+  <div class="nav">
+    <a href="/">Search</a>
+    <a href="/admin" class="active">Library</a>
+    <a href="/about">About</a>
+  </div>
+  <div class="right">
+    <span><span class="status-dot"></span> Online</span>
+    <span id="installPath"></span>
+  </div>
+</div>
+
+<div class="container">
+  <h1>Library</h1>
+  <p class="lede">Manage what's installed on your drive. Add new ZIMs, remove old ones, monitor downloads.</p>
+
+  <div class="stats-row" id="stats"></div>
+
+  <!-- Active downloads -->
+  <div class="section" id="downloadsSection">
+    <h2>
+      Active Downloads
+      <span class="actions"><button class="btn" onclick="window.location='/setup'">+ Add ZIMs</button></span>
+    </h2>
+    <div id="downloads"></div>
+  </div>
+
+  <!-- Installed -->
+  <div class="section">
+    <h2>Installed Libraries</h2>
+    <div class="lib-grid" id="installed"></div>
+  </div>
+
+  <!-- Available (not installed) -->
+  <div class="section">
+    <h2>Available to Add</h2>
+    <div class="lib-grid" id="available"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="signature">
+  <span>Built by <a href="/about">Henry Ratterman</a></span>
+  <span class="dot">·</span>
+  <span><a href="https://henryratterman.com" target="_blank" rel="noopener">henryratterman.com</a></span>
+  <span class="dot">·</span>
+  <span><a href="https://github.com/hratterman/apocalypse-drive" target="_blank" rel="noopener">GitHub</a></span>
+</div>
+
+<script>
+let CATALOG, STATUS;
+let pollTimer = null;
+
+async function refresh() {
+  try {
+    const [c, s, p] = await Promise.all([
+      fetch('/api/catalog').then(r=>r.json()),
+      fetch('/api/status').then(r=>r.json()),
+      fetch('/api/download/progress').then(r=>r.json()),
+    ]);
+    CATALOG = c; STATUS = s;
+    renderStats();
+    renderDownloads(p.downloads);
+    renderLibraries();
+    document.getElementById('installPath').textContent = STATUS.install_dir;
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function renderStats() {
+  const installed = new Set(STATUS.installed_ids || []);
+  let installedBytes = 0;
+  for (const item of CATALOG.items) {
+    if (installed.has(item.id)) installedBytes += item.size_bytes;
+  }
+  const free = STATUS.disk?.free || 0;
+  const total = STATUS.disk?.total || 1;
+  const usedPct = ((total - free) / total * 100).toFixed(0);
+
+  document.getElementById('stats').innerHTML = `
+    <div class="stat">
+      <div class="label">Installed</div>
+      <div class="value">${installed.size}</div>
+      <div class="sub">${fmtBytes(installedBytes)}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Available to Add</div>
+      <div class="value">${CATALOG.items.length - installed.size}</div>
+      <div class="sub">in catalog</div>
+    </div>
+    <div class="stat">
+      <div class="label">Disk Used</div>
+      <div class="value ${free < total * 0.1 ? 'warn' : ''}">${usedPct}%</div>
+      <div class="sub">${fmtBytes(total - free)} of ${fmtBytes(total)}</div>
+    </div>
+    <div class="stat">
+      <div class="label">Disk Free</div>
+      <div class="value good">${fmtBytes(free)}</div>
+      <div class="sub">remaining</div>
+    </div>
+  `;
+}
+
+function renderDownloads(downloads) {
+  const section = document.getElementById('downloadsSection');
+  const container = document.getElementById('downloads');
+  const active = downloads.filter(d => d.status === 'downloading' || d.status === 'queued');
+  if (downloads.length === 0) {
+    container.innerHTML = '<div class="empty">No active downloads</div>';
+    return;
+  }
+  container.innerHTML = '';
+  for (const d of downloads) {
+    const pct = d.total > 0 ? Math.min(100, (d.downloaded / d.total) * 100) : 0;
+    const fillClass = d.status === 'done' ? 'done' : (d.status === 'error' ? 'error' : '');
+    const row = document.createElement('div');
+    row.className = 'dl-row';
+    row.innerHTML = `
+      <div class="top">
+        <div class="name">${d.name}</div>
+        <div class="stats">
+          <span class="status ${d.status}">${d.status}</span>
+          ${d.total > 0 ? ` · ${fmtBytes(d.downloaded)} / ${fmtBytes(d.total)} · ${pct.toFixed(1)}%` : ''}
+          ${d.status === 'downloading' ? `<button class="btn" style="margin-left:8px" onclick="cancelDownload('${d.id}')">Cancel</button>` : ''}
+          ${d.error ? ` · ${d.error}` : ''}
+        </div>
+      </div>
+      <div class="dl-bar"><div class="fill ${fillClass}" style="width:${pct}%"></div></div>
+    `;
+    container.appendChild(row);
+  }
+  // Continue polling if anything's active
+  if (active.length > 0) schedulePoll();
+}
+
+function renderLibraries() {
+  const installed = new Set(STATUS.installed_ids || []);
+  const installedList = document.getElementById('installed');
+  const availList = document.getElementById('available');
+  installedList.innerHTML = '';
+  availList.innerHTML = '';
+
+  const installedItems = CATALOG.items.filter(i => installed.has(i.id));
+  const availItems = CATALOG.items.filter(i => !installed.has(i.id));
+
+  if (installedItems.length === 0) {
+    installedList.innerHTML = '<div class="empty">Nothing installed yet. <a href="/setup" style="color:var(--accent)">Run the wizard</a> to add some.</div>';
+  } else {
+    for (const item of installedItems) installedList.appendChild(libRow(item, true));
+  }
+  if (availItems.length === 0) {
+    availList.innerHTML = '<div class="empty">Everything in the catalog is installed. Nice.</div>';
+  } else {
+    for (const item of availItems) availList.appendChild(libRow(item, false));
+  }
+}
+
+function libRow(item, isInstalled) {
+  const row = document.createElement('div');
+  row.className = 'lib';
+  const action = isInstalled
+    ? `<button class="btn danger" onclick="removeItem('${item.id}', '${item.title.replace(/'/g, "\\'")}')">Remove</button>`
+    : `<button class="btn primary" onclick="addItem('${item.id}')">Download</button>`;
+  row.innerHTML = `
+    <div class="info">
+      <div class="title">${item.title}</div>
+      <div class="sub">${item.subtitle} · ${item.category}</div>
+    </div>
+    <div class="size">${fmtBytes(item.size_bytes)}</div>
+    ${action}
+  `;
+  return row;
+}
+
+async function addItem(id) {
+  const res = await fetch('/api/download/start', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ids: [id], model: 'none'}),
+  });
+  const d = await res.json();
+  toast('Started download');
+  schedulePoll();
+}
+
+async function removeItem(id, title) {
+  if (!confirm(`Remove "${title}" from the drive? You can re-download anytime.`)) return;
+  const res = await fetch('/api/download/remove', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({id}),
+  });
+  const d = await res.json();
+  if (d.removed) {
+    toast('Removed');
+    await fetch('/api/services/restart', {method: 'POST'});
+    refresh();
+  } else {
+    toast('Could not remove');
+  }
+}
+
+async function cancelDownload(id) {
+  await fetch('/api/download/cancel', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({id}),
+  });
+  toast('Cancelled');
+  refresh();
+}
+
+function schedulePoll() {
+  if (pollTimer) return;
+  pollTimer = setInterval(async () => {
+    const p = await fetch('/api/download/progress').then(r=>r.json());
+    renderDownloads(p.downloads);
+    const stillActive = p.downloads.some(d => d.status === 'downloading' || d.status === 'queued');
+    if (!stillActive) {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      // Refresh installed list when downloads complete
+      const newStatus = await fetch('/api/status').then(r=>r.json());
+      STATUS = newStatus;
+      renderStats();
+      renderLibraries();
+    }
+  }, 2000);
+}
+
+function fmtBytes(n) {
+  if (!n) return '0 B';
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+  if (n < 1099511627776) return (n / 1073741824).toFixed(1) + ' GB';
+  return (n / 1099511627776).toFixed(2) + ' TB';
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+refresh();
+</script>
+
+</body>
+</html>

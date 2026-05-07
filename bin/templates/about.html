@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apocalypse · About</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #161922; --panel-2: #1d2230;
+    --border: #2a3142; --text: #e6e9ef; --muted: #8b95a8;
+    --accent: #ffa940; --accent-dim: #b67630;
+    --good: #4ade80;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px; line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 14px 28px; display: flex; align-items: center; gap: 16px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .topbar .logo {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 700; font-size: 17px; color: var(--accent); letter-spacing: 0.5px;
+  }
+  .topbar .nav { display: flex; gap: 4px; margin-left: 16px; }
+  .topbar .nav a {
+    padding: 6px 12px; border-radius: 6px; color: var(--muted);
+    text-decoration: none; font-size: 14px;
+  }
+  .topbar .nav a:hover { color: var(--text); background: var(--panel-2); }
+  .topbar .nav a.active { color: var(--text); background: var(--panel-2); }
+
+  .container { max-width: 760px; margin: 0 auto; padding: 48px 28px 80px; }
+  h1 { font-size: 32px; margin: 0 0 8px; letter-spacing: -0.4px; font-weight: 700; }
+  h2 {
+    font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--muted); font-weight: 600;
+    margin: 36px 0 12px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  p { margin: 0 0 14px; color: var(--text); }
+  p.muted { color: var(--muted); }
+
+  .hero {
+    background: linear-gradient(135deg, rgba(255,169,64,0.08), rgba(255,169,64,0.02));
+    border: 1px solid var(--border); border-radius: 12px;
+    padding: 28px; margin-bottom: 32px;
+    display: flex; gap: 24px; align-items: flex-start;
+  }
+  .hero .glyph {
+    flex-shrink: 0; width: 72px; height: 72px;
+    background: var(--accent); border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--bg); font-weight: 800; font-size: 38px;
+    font-family: "SF Pro Display", system-ui, sans-serif;
+  }
+  .hero h1 { margin-bottom: 6px; }
+  .hero .tagline { color: var(--muted); font-size: 15px; }
+  .hero .version {
+    display: inline-block; margin-top: 12px;
+    padding: 3px 10px; background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 12px; font-size: 12px; color: var(--muted);
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+  }
+
+  .links { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  .link-row {
+    display: flex; gap: 14px; align-items: center;
+    padding: 14px 16px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; text-decoration: none; color: var(--text);
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .link-row:hover { border-color: var(--accent-dim); background: var(--panel-2); }
+  .link-row .icon {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: var(--panel-2); display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: 18px;
+  }
+  .link-row .info { flex: 1; min-width: 0; }
+  .link-row .info .label { font-weight: 600; font-size: 14px; }
+  .link-row .info .url {
+    font-size: 12px; color: var(--muted); font-family: "SF Mono", Menlo, Consolas, monospace;
+    margin-top: 2px;
+    word-break: break-all;
+  }
+  .link-row .arrow { color: var(--muted); font-size: 14px; flex-shrink: 0; }
+
+  .stack { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+  .stack-item {
+    padding: 10px 12px; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; font-size: 13px;
+  }
+  .stack-item .name { font-weight: 600; }
+  .stack-item .what { color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  .quote {
+    border-left: 3px solid var(--accent); padding: 4px 0 4px 18px;
+    color: var(--muted); font-style: italic; margin: 24px 0;
+  }
+
+  .signature {
+    margin-top: 56px; padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 13px;
+    text-align: center; line-height: 1.7;
+  }
+  .signature .heart { color: #f87171; }
+  .signature a { color: var(--accent); text-decoration: none; }
+  .signature a:hover { text-decoration: underline; }
+
+  .net-banner {
+    margin: 0 0 24px; padding: 10px 14px;
+    background: rgba(255,169,64,0.06); border: 1px solid var(--accent-dim);
+    border-radius: 8px; font-size: 13px; color: var(--accent);
+    display: flex; gap: 10px; align-items: center;
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">APOCALYPSE</div>
+  <div class="nav">
+    <a href="/">Search</a>
+    <a href="/admin">Library</a>
+    <a href="/about" class="active">About</a>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="hero">
+    <div class="glyph">A</div>
+    <div>
+      <h1>Apocalypse</h1>
+      <div class="tagline">A self-contained offline knowledge library with built-in RAG.</div>
+      <span class="version" id="version">v1.0.0</span>
+    </div>
+  </div>
+
+  <div class="net-banner">
+    The links below open in your browser. They need internet to load. The rest of Apocalypse works offline forever.
+  </div>
+
+  <h2>Built by</h2>
+  <p>
+    <strong>Henry Ratterman</strong>. Marketing major at Indiana University Kelley.
+    Currently in Bloomington, Indiana, headed for SF. Builds things in his free time.
+    If you're using Apocalypse and have thoughts, say hi.
+  </p>
+
+  <div class="links">
+    <a class="link-row" href="https://henryratterman.com" target="_blank" rel="noopener">
+      <div class="icon">🌐</div>
+      <div class="info">
+        <div class="label">henryratterman.com</div>
+        <div class="url">My personal site. Projects, writing, contact info.</div>
+      </div>
+      <div class="arrow">↗</div>
+    </a>
+    <a class="link-row" href="mailto:henry@henryratterman.com">
+      <div class="icon">✉</div>
+      <div class="info">
+        <div class="label">henry@henryratterman.com</div>
+        <div class="url">Email me. I read everything.</div>
+      </div>
+      <div class="arrow">↗</div>
+    </a>
+    <a class="link-row" href="https://github.com/hratterman/apocalypse-drive" target="_blank" rel="noopener">
+      <div class="icon">⚙</div>
+      <div class="info">
+        <div class="label">github.com/hratterman/apocalypse-drive</div>
+        <div class="url">Source code, releases, issues.</div>
+      </div>
+      <div class="arrow">↗</div>
+    </a>
+    <a class="link-row" href="https://galley.henryratterman.com" target="_blank" rel="noopener">
+      <div class="icon">📖</div>
+      <div class="info">
+        <div class="label">galley.henryratterman.com</div>
+        <div class="url">Galley. AI book editor I made. Different project, same builder.</div>
+      </div>
+      <div class="arrow">↗</div>
+    </a>
+  </div>
+
+  <h2>Why this exists</h2>
+  <p>
+    Wikipedia is one of the best things humans have made. It runs on a couple of data centers in Virginia
+    and Texas. Khan Academy, Stack Overflow, Project Gutenberg too. Most of what you'd want to read in
+    your lifetime depends on a power grid you don't control.
+  </p>
+  <p>
+    Apocalypse is the simplest way to put 1.2 TB of human knowledge on a hard drive and have it work
+    forever, with or without the internet. A working AI sits on top so you can ask questions instead of
+    just searching.
+  </p>
+  <div class="quote">
+    "The marginal cost of completeness is near zero. Do the whole thing."
+  </div>
+
+  <h2>What it's built on</h2>
+  <p class="muted">
+    Apocalypse is a thin layer over a stack of incredible open-source projects. The real work was done
+    by other people. I just glued it together and made it nice to use.
+  </p>
+  <div class="stack">
+    <div class="stack-item">
+      <div class="name">Kiwix</div>
+      <div class="what">ZIM format and content library</div>
+    </div>
+    <div class="stack-item">
+      <div class="name">openZIM</div>
+      <div class="what">The ZIM files themselves</div>
+    </div>
+    <div class="stack-item">
+      <div class="name">Mozilla llamafile</div>
+      <div class="what">Local LLM inference</div>
+    </div>
+    <div class="stack-item">
+      <div class="name">Meta Llama 3</div>
+      <div class="what">The actual model</div>
+    </div>
+    <div class="stack-item">
+      <div class="name">libzim</div>
+      <div class="what">Python bindings for ZIM</div>
+    </div>
+    <div class="stack-item">
+      <div class="name">pystray + Pillow</div>
+      <div class="what">Cross-platform tray UI</div>
+    </div>
+    <div class="stack-item">
+      <div class="name">PyInstaller</div>
+      <div class="what">Self-contained app bundles</div>
+    </div>
+    <div class="stack-item">
+      <div class="name">Wikipedia, Khan, SO, etc.</div>
+      <div class="what">All the actual knowledge</div>
+    </div>
+  </div>
+
+  <h2>License</h2>
+  <p class="muted">
+    Apocalypse itself is MIT licensed. The bundled ZIMs and the LLM each have their own licenses (mostly
+    CC-BY-SA and Llama 3 Community License). See the GitHub repo for full details.
+  </p>
+
+  <div class="signature">
+    Made <span class="heart">♥</span> in Bloomington, Indiana<br/>
+    by <a href="https://henryratterman.com" target="_blank" rel="noopener">Henry Ratterman</a><br/>
+    <span style="opacity:0.6">© 2026 · MIT License</span>
+  </div>
+
+</div>
+
+<script>
+// Pull version from /api/status if available, otherwise leave default
+fetch('/api/status').then(r => r.json()).then(d => {
+  if (d.version) document.getElementById('version').textContent = 'v' + d.version;
+}).catch(() => {});
+</script>
+
+</body>
+</html>

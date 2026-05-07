@@ -1,5 +1,5 @@
 #!/bin/bash
-# Apocalypse launcher — Linux
+# Apocalypse launcher (Linux)
 # Starts kiwix-serve + llamafile, opens browser to the unified RAG UI.
 
 set -e

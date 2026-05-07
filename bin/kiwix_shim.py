@@ -31,8 +31,10 @@ try:
     from libzim.reader import Archive
     from libzim.search import Searcher, Query
     from libzim.suggestion import SuggestionSearcher
-except ImportError:
-    print("ERROR: libzim not installed. Run: pip3 install libzim", file=sys.stderr)
+except ImportError as _e:
+    import traceback
+    print(f"ERROR: libzim not loadable: {_e}", file=sys.stderr)
+    traceback.print_exc()
     sys.exit(1)
 
 
@@ -47,7 +49,7 @@ def load_archives(zim_dir):
         if not fn.endswith('.zim'):
             continue
         path = os.path.join(zim_dir, fn)
-        # Use full filename minus extension as the book key — matches kiwix convention
+        # Use full filename minus extension as the book key (matches kiwix convention)
         key = fn[:-4]
         try:
             archives[key] = Archive(path)
@@ -65,18 +67,18 @@ def guess_mime(path):
     return mime or 'application/octet-stream'
 
 
-# Patterns that signal "this article is a stub/disambig — the real content is elsewhere"
+# Patterns that signal "this article is a stub/disambig: the real content is elsewhere"
 # Examples from Wikipedia ZIM:
 #   "For the primary active ingredient of Tylenol, see Acetaminophen."
 #   "For other uses, see Foo (disambiguation)."
 #   "Main article: Acetaminophen"
 #   "(Redirected from Tylenol)"
 HATNOTE_PATTERNS = [
-    # "For X, see <a href="link">Article</a>"  — most common
+    # "For X, see <a href="link">Article</a>"  (most common)
     re.compile(r'For [^<.]{3,80}?,?\s*see\s*<a[^>]+href="([^"#]+)"[^>]*>([^<]+)</a>', re.IGNORECASE),
     # "Main article: <a href="link">Article</a>"
     re.compile(r'Main\s+article:\s*<a[^>]+href="([^"#]+)"[^>]*>([^<]+)</a>', re.IGNORECASE),
-    # "See also: <a href="link">Article</a>"  (lower confidence — only if article is short)
+    # "See also: <a href="link">Article</a>"  (lower confidence, only if article is short)
     re.compile(r'See\s+also:\s*<a[^>]+href="([^"#]+)"[^>]*>([^<]+)</a>', re.IGNORECASE),
 ]
 
@@ -120,7 +122,7 @@ def resolve_exact_title(archive, query):
                 e = archive.get_entry_by_path(cand)
                 if e.is_redirect:
                     e = e.get_redirect_entry()
-                # Reject disambig pages — they're never what users want
+                # Reject disambig pages, they're never what users want
                 if '(disambiguation)' in e.path.lower() or '(disambiguation)' in (e.title or '').lower():
                     continue
                 return (e.path, e.title or e.path)
@@ -155,14 +157,14 @@ def title_quality_score(path):
 
 
 # =====================================================================
-# RAG pipeline helpers — LLM-driven question answering
+# RAG pipeline helpers (LLM-driven question answering)
 # =====================================================================
 
 # Configurable via env vars (set by launcher) so we don't hardcode the URL
 LLAMAFILE_URL = os.environ.get('LLAMAFILE_URL', 'http://127.0.0.1:8081')
 
 # Title prediction: ask the LLM what Wikipedia article(s) would answer the
-# question. The few-shot examples are critical — without them the 3B model
+# question. The few-shot examples are critical. Without them the 3B model
 # invents titles like "How to Build a Bridge".
 TITLE_PREDICTION_SYSTEM = '''You are a Wikipedia expert. Given a user question, identify 2-4 SHORT, EXISTING Wikipedia article titles that contain the answer.
 
@@ -389,7 +391,7 @@ def gather_candidates(question, max_candidates=6):
                 break
 
     # Stage 3: Pull the actual text content for each candidate (text + lede)
-    # This is the slow part — happens after dedup so we only fetch each once.
+    # This is the slow part. Happens after dedup so we only fetch each once.
     for c in candidates:
         archive = ARCHIVES.get(c['book'])
         if not archive:
@@ -477,7 +479,7 @@ def follow_hatnote(archive, book_key, entry_path, max_chars=8000):
         # Normalize the link to a ZIM-resolvable path. Wikipedia ZIM links
         # look like "Acetaminophen" (relative) or "A/Acetaminophen".
         link = link.lstrip('./')
-        if link.startswith('_'):  # _res_, _mw_ — these are CSS/JS, skip
+        if link.startswith('_'):  # _res_, _mw_ etc are CSS/JS, skip
             continue
         # Try a few candidate paths
         candidates = [link, f'A/{link}', urllib.parse.unquote(link), f'A/{urllib.parse.unquote(link)}']
@@ -518,12 +520,30 @@ class Handler(BaseHTTPRequestHandler):
         qs = urllib.parse.parse_qs(parsed.query)
 
         try:
+            # Setup wizard / admin / api routes (if enabled)
+            try:
+                import setup_routes
+                if setup_routes.is_initialized():
+                    result = setup_routes.dispatch_get(path, qs)
+                    if result is not None:
+                        status, headers, body = result
+                        self.send_response(status)
+                        self._cors()
+                        for k, v in headers:
+                            self.send_header(k, v)
+                        self.send_header('Content-Length', str(len(body)))
+                        self.end_headers()
+                        self.wfile.write(body)
+                        return
+            except ImportError:
+                pass
+
             if path == '/' or path == '/index.html':
                 return self._index()
             if path == '/search':
                 return self._search(qs)
             if path == '/answer':
-                # Allow GET for ease of testing — body comes from query string
+                # Allow GET for ease of testing (body comes from query string)
                 return self._answer({'q': (qs.get('q') or qs.get('question') or [''])[0]})
             if path.startswith('/content/'):
                 return self._content(path[len('/content/'):])
@@ -544,6 +564,25 @@ class Handler(BaseHTTPRequestHandler):
                 body = json.loads(raw) if raw else {}
             except Exception:
                 body = {}
+
+            # Setup/admin POST routes
+            try:
+                import setup_routes
+                if setup_routes.is_initialized():
+                    result = setup_routes.dispatch_post(path, body)
+                    if result is not None:
+                        status, headers, body_out = result
+                        self.send_response(status)
+                        self._cors()
+                        for k, v in headers:
+                            self.send_header(k, v)
+                        self.send_header('Content-Length', str(len(body_out)))
+                        self.end_headers()
+                        self.wfile.write(body_out)
+                        return
+            except ImportError:
+                pass
+
             if path == '/answer':
                 return self._answer(body)
             self._json(404, {"error": "not found", "path": path})
@@ -555,7 +594,7 @@ class Handler(BaseHTTPRequestHandler):
                 '<title>Apocalypse Kiwix Shim</title>',
                 '<style>body{font-family:system-ui;max-width:800px;margin:40px auto;padding:0 20px;}',
                 'h1{color:#2c3e50;}li{margin:8px 0;}</style></head><body>',
-                f'<h1>📚 Apocalypse — {len(ARCHIVES)} ZIMs loaded</h1>',
+                f'<h1>📚 Apocalypse · {len(ARCHIVES)} ZIMs loaded</h1>',
                 '<p>Python+libzim shim (replaces kiwix-serve on macOS+exFAT)</p>',
                 '<ul>']
         for key, a in ARCHIVES.items():
@@ -589,7 +628,7 @@ class Handler(BaseHTTPRequestHandler):
         if book and book in ARCHIVES:
             targets = [book]
         else:
-            # Order matters — we search high-priority books first and only
+            # Order matters: we search high-priority books first and only
             # fall through to the rest when those return nothing useful.
             # Encyclopedias > Q&A > literature.
             priority_order = []
@@ -606,7 +645,7 @@ class Handler(BaseHTTPRequestHandler):
                     'unix.stackexchange', 'math.stackexchange', 'physics.stackexchange',
                 )) and k not in priority_order:
                     priority_order.append(k)
-            # Gutenberg dead last — it's literature, almost always low-relevance
+            # Gutenberg dead last (it's literature, almost always low-relevance
             # for factual questions.
             for k in ARCHIVES:
                 if k not in priority_order:
@@ -626,7 +665,7 @@ class Handler(BaseHTTPRequestHandler):
             book_hits = []
             seen = set()
 
-            # 0. EXACT TITLE MATCH — by far the highest-quality signal.
+            # 0. EXACT TITLE MATCH (by far the highest-quality signal).
             # "Detroit" -> the city article at path "Detroit", not the bus
             # station. "Tylenol" -> the Tylenol article. Try the full query,
             # then progressively shorter prefixes ("tylenol work" -> "tylenol").
@@ -645,7 +684,7 @@ class Handler(BaseHTTPRequestHandler):
 
             # 1. Title suggestions: try the full query first, then fall back
             # to each word individually. Title-suggest matches title prefixes,
-            # so multi-word queries usually return nothing — but ANY single
+            # so multi-word queries usually return nothing, but ANY single
             # noun word ("tylenol", "paracetamol") will hit the right article.
             title_queries = [pattern]
             words = [w for w in pattern.split() if len(w) > 2]
@@ -718,7 +757,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
 
-            # 3. Hatnote following — for Wikipedia-family books, look at the
+            # 3. Hatnote following: for Wikipedia-family books, look at the
             # top hit and check if it's a brand/stub page that points to the
             # article with the actual content. Examples:
             #   "Tylenol" -> "For the active ingredient, see Acetaminophen"
@@ -773,7 +812,7 @@ class Handler(BaseHTTPRequestHandler):
         seen_titles = set()
 
         def _dedup_key(r):
-            # Same article in different ZIMs has the same title — dedup on title only
+            # Same article in different ZIMs has the same title, dedup on title only
             return (r["title"].lower().strip())
 
         def _add(r):
@@ -903,7 +942,7 @@ class Handler(BaseHTTPRequestHandler):
             "2. Cite each claim by [Source N].\n"
             "3. If the sources do not directly answer the question, say so plainly "
             "and describe what information IS available in the sources.\n"
-            "4. Write a complete, useful answer — at least 3-5 sentences when the "
+            "4. Write a complete, useful answer (at least 3-5 sentences when the "
             "sources support it. Don't truncate to a single line.\n"
             "5. Never write a sentence without a [Source N] citation."
         )
@@ -976,21 +1015,65 @@ def main():
     global ZIM_DIR, ARCHIVES
     p = argparse.ArgumentParser()
     p.add_argument('--port', type=int, default=8888)
-    p.add_argument('--zim-dir', default='/Volumes/Media/apocalypse/kiwix/zim')
+    p.add_argument('--install-dir', default=None,
+                   help='Apocalypse install directory (e.g. /Volumes/Media/apocalypse). '
+                        'If set, ZIM dir defaults to <install-dir>/kiwix/zim and setup wizard is enabled.')
+    p.add_argument('--zim-dir', default=None,
+                   help='Override ZIM directory (defaults to <install-dir>/kiwix/zim or /Volumes/Media/apocalypse/kiwix/zim)')
     p.add_argument('--host', default='127.0.0.1')
+    p.add_argument('--catalog', default=None,
+                   help='Path to data/catalog.json (defaults to ../data/catalog.json relative to this script)')
     args = p.parse_args()
 
-    ZIM_DIR = args.zim_dir
-    if not os.path.isdir(ZIM_DIR):
-        print(f"ZIM dir not found: {ZIM_DIR}", file=sys.stderr)
-        sys.exit(1)
+    # Resolve install dir + zim dir
+    install_dir = args.install_dir
+    if install_dir:
+        install_dir = os.path.abspath(install_dir)
+    zim_dir = args.zim_dir
+    if not zim_dir:
+        if install_dir:
+            zim_dir = os.path.join(install_dir, 'kiwix', 'zim')
+        else:
+            zim_dir = '/Volumes/Media/apocalypse/kiwix/zim'
+
+    # Make sure zim_dir exists (don't fail, first-run setup)
+    os.makedirs(zim_dir, exist_ok=True)
+    ZIM_DIR = zim_dir
+
+    # Wire up setup routes if we have an install dir
+    if install_dir:
+        catalog_path = args.catalog
+        if not catalog_path:
+            here = os.path.dirname(os.path.abspath(__file__))
+            catalog_path = os.path.join(os.path.dirname(here), 'data', 'catalog.json')
+        if os.path.exists(catalog_path):
+            try:
+                # Make sure the shim's own dir is on sys.path so setup_routes
+                # is importable in PyInstaller bundles too
+                shim_dir = os.path.dirname(os.path.abspath(__file__))
+                if shim_dir not in sys.path:
+                    sys.path.insert(0, shim_dir)
+                import setup_routes
+                def restart_hook():
+                    global ARCHIVES
+                    ARCHIVES = load_archives(ZIM_DIR)
+                setup_routes.init(install_dir, catalog_path, restart_hook=restart_hook)
+                print(f"Setup routes enabled (install_dir={install_dir})")
+                print(f"  Wizard: http://{args.host}:{args.port}/setup")
+                print(f"  Admin:  http://{args.host}:{args.port}/admin")
+            except Exception as e:
+                print(f"Warning: setup routes failed to init: {e}", file=sys.stderr)
+                import traceback
+                traceback.print_exc()
+        else:
+            print(f"Warning: catalog.json not found at {catalog_path}", file=sys.stderr)
 
     print(f"Loading ZIMs from {ZIM_DIR}...")
     ARCHIVES = load_archives(ZIM_DIR)
     if not ARCHIVES:
-        print("No ZIMs loaded — exiting", file=sys.stderr)
-        sys.exit(1)
-    print(f"Serving {len(ARCHIVES)} books on http://{args.host}:{args.port}/")
+        print(f"No ZIMs loaded yet. The setup wizard at http://{args.host}:{args.port}/setup will install them.")
+    else:
+        print(f"Serving {len(ARCHIVES)} books on http://{args.host}:{args.port}/")
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
     try:
         srv.serve_forever()

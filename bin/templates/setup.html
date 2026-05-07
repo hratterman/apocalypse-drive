@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apocalypse · First Run Setup</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #161922;
+    --panel-2: #1d2230;
+    --border: #2a3142;
+    --text: #e6e9ef;
+    --muted: #8b95a8;
+    --accent: #ffa940;
+    --accent-dim: #b67630;
+    --good: #4ade80;
+    --warn: #fbbf24;
+    --bad: #f87171;
+    --essential: #fb923c;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; min-height: 100vh;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", system-ui, sans-serif;
+    font-size: 15px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 28px;
+    display: flex; align-items: center; gap: 16px;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .topbar .logo {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-weight: 700;
+    font-size: 17px;
+    color: var(--accent);
+    letter-spacing: 0.5px;
+  }
+  .topbar .step-pills {
+    display: flex; gap: 8px; margin-left: auto;
+  }
+  .pill {
+    padding: 4px 12px; border-radius: 20px;
+    font-size: 12px; color: var(--muted);
+    background: var(--panel-2); border: 1px solid var(--border);
+  }
+  .pill.active { color: var(--bg); background: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .pill.done { color: var(--good); border-color: var(--good); }
+
+  .container { max-width: 980px; margin: 0 auto; padding: 32px 28px 80px; }
+
+  .step { display: none; animation: fade 0.25s ease; }
+  .step.active { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  h1 { font-size: 28px; font-weight: 700; margin: 0 0 8px; letter-spacing: -0.3px; }
+  h2 { font-size: 20px; font-weight: 600; margin: 24px 0 12px; }
+  .lede { color: var(--muted); font-size: 16px; margin: 0 0 28px; max-width: 680px; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px;
+  }
+
+  /* Bundle cards (step 1) */
+  .bundles { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin-bottom: 28px; }
+  .bundle {
+    background: var(--panel); border: 2px solid var(--border);
+    border-radius: 10px; padding: 18px; cursor: pointer;
+    transition: border-color 0.15s, transform 0.15s;
+  }
+  .bundle:hover { border-color: var(--accent-dim); transform: translateY(-1px); }
+  .bundle.selected { border-color: var(--accent); background: linear-gradient(180deg, rgba(255,169,64,0.08) 0%, var(--panel) 100%); }
+  .bundle h3 { font-size: 16px; margin: 0 0 4px; color: var(--text); }
+  .bundle .size { font-size: 13px; color: var(--accent); font-weight: 600; }
+  .bundle .desc { font-size: 13px; color: var(--muted); margin: 8px 0 0; line-height: 1.4; }
+
+  /* Disk meter (step 2) */
+  .disk-meter {
+    position: sticky; top: 60px; z-index: 5;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 24px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+  .meter-row {
+    display: flex; gap: 28px; align-items: center; flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .meter-stat { display: flex; flex-direction: column; gap: 2px; }
+  .meter-stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+  .meter-stat .value {
+    font-size: 18px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .meter-stat .value.warn { color: var(--warn); }
+  .meter-stat .value.bad { color: var(--bad); }
+  .meter-stat .value.good { color: var(--good); }
+  .meter-bar {
+    width: 100%; height: 12px;
+    background: var(--panel-2); border-radius: 6px; overflow: hidden;
+    position: relative;
+  }
+  .meter-bar .fill-existing { position: absolute; left: 0; top: 0; bottom: 0; background: #3b4255; transition: width 0.2s; }
+  .meter-bar .fill-selected { position: absolute; top: 0; bottom: 0; background: var(--accent); transition: width 0.2s, left 0.2s; }
+  .meter-legend { display: flex; gap: 16px; margin-top: 8px; font-size: 11px; color: var(--muted); }
+  .meter-legend span { display: flex; align-items: center; gap: 6px; }
+  .meter-legend .swatch {
+    width: 10px; height: 10px; border-radius: 2px; display: inline-block;
+  }
+  .meter-legend .sw-installed { background: #3b4255; }
+  .meter-legend .sw-selected { background: var(--accent); }
+  .meter-legend .sw-free { background: var(--panel-2); border: 1px solid var(--border); }
+
+  /* ZIM grid (step 2) */
+  .category {
+    margin-bottom: 28px;
+  }
+  .category h2 {
+    font-size: 14px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); font-weight: 600; margin: 24px 0 12px;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+  .zim-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .zim {
+    display: flex; gap: 14px; padding: 12px 14px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; cursor: pointer; align-items: flex-start;
+    transition: background 0.1s, border-color 0.1s;
+  }
+  .zim:hover { background: var(--panel-2); border-color: #3a4258; }
+  .zim.selected {
+    border-color: var(--accent);
+    background: linear-gradient(90deg, rgba(255,169,64,0.10) 0%, rgba(255,169,64,0.04) 100%);
+  }
+  .zim.installed { border-color: var(--good); background: rgba(74,222,128,0.04); }
+  .zim input[type=checkbox] {
+    margin: 4px 0 0 0; width: 16px; height: 16px;
+    accent-color: var(--accent); flex-shrink: 0; cursor: pointer;
+  }
+  .zim .info { flex: 1; min-width: 0; }
+  .zim .row1 { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .zim .title { font-weight: 600; font-size: 15px; }
+  .zim .badges { display: flex; gap: 6px; }
+  .badge {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 2px 6px; border-radius: 4px; font-weight: 600;
+  }
+  .badge.essential { background: var(--essential); color: var(--bg); }
+  .badge.installed { background: var(--good); color: var(--bg); }
+  .zim .subtitle { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .zim .desc { font-size: 13px; color: var(--muted); margin-top: 6px; line-height: 1.45; }
+  .zim .size {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px; color: var(--accent); font-weight: 600;
+    flex-shrink: 0; min-width: 80px; text-align: right;
+  }
+
+  /* Model picker */
+  .model-pick { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .model {
+    background: var(--panel); border: 2px solid var(--border);
+    border-radius: 8px; padding: 14px; cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .model:hover { border-color: var(--accent-dim); background: var(--panel-2); }
+  .model.selected {
+    border-color: var(--accent);
+    background: linear-gradient(180deg, rgba(255,169,64,0.10) 0%, rgba(255,169,64,0.03) 100%);
+    position: relative;
+  }
+  .model.selected::before {
+    content: "✓"; position: absolute; top: 8px; right: 10px;
+    color: var(--accent); font-weight: 700; font-size: 14px;
+  }
+  .model h4 { margin: 0 0 4px; font-size: 14px; }
+  .model .ms { font-size: 12px; color: var(--accent); font-weight: 600; }
+  .model .md { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+
+  /* Buttons */
+  .btn-row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+  .btn {
+    padding: 10px 18px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--text); font-size: 14px;
+    font-weight: 500; cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+  }
+  .btn:hover { background: var(--border); }
+  .btn.primary {
+    background: var(--accent); color: var(--bg); border-color: var(--accent);
+    font-weight: 600;
+  }
+  .btn.primary:hover { background: #ffb866; border-color: #ffb866; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Step 3: download progress */
+  .dl-list { display: grid; gap: 10px; margin-top: 16px; }
+  .dl-row {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px 14px;
+  }
+  .dl-row .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .dl-row .name { font-weight: 500; }
+  .dl-row .stats { font-size: 12px; color: var(--muted); font-family: "SF Mono", Menlo, Consolas, monospace; }
+  .dl-bar {
+    height: 6px; background: var(--panel-2); border-radius: 4px;
+    margin-top: 8px; overflow: hidden;
+  }
+  .dl-bar .fill { height: 100%; background: var(--accent); transition: width 0.3s; }
+  .dl-bar .fill.done { background: var(--good); }
+  .dl-bar .fill.error { background: var(--bad); }
+  .dl-row .status { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .status.queued { color: var(--muted); }
+  .status.downloading { color: var(--accent); }
+  .status.done { color: var(--good); }
+  .status.error { color: var(--bad); }
+  .status.cancelled { color: var(--muted); }
+
+  .summary {
+    background: var(--panel-2); border: 1px solid var(--border);
+    padding: 14px 18px; border-radius: 8px; margin-top: 16px;
+    font-size: 14px; color: var(--muted);
+  }
+  .summary strong { color: var(--text); }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--accent);
+    color: var(--text); padding: 12px 20px; border-radius: 8px;
+    font-size: 14px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+    z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+
+  .empty-hint {
+    text-align: center; color: var(--muted); padding: 40px 20px;
+    font-style: italic;
+  }
+
+  .signature {
+    margin-top: 60px; padding: 20px 28px; text-align: center;
+    color: var(--muted); font-size: 12px;
+    border-top: 1px solid var(--border); background: var(--panel);
+  }
+  .signature a { color: var(--muted); text-decoration: none; transition: color 0.15s; }
+  .signature a:hover { color: var(--accent); }
+  .signature .dot { margin: 0 8px; opacity: 0.5; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">APOCALYPSE</div>
+  <div class="step-pills">
+    <div class="pill active" id="pill1">1. Choose Library</div>
+    <div class="pill" id="pill2">2. Pick ZIMs</div>
+    <div class="pill" id="pill3">3. Download</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- ========== STEP 1: Welcome + bundle picker ========== -->
+  <div class="step active" id="step1">
+    <h1>Welcome to Apocalypse</h1>
+    <p class="lede">A self-contained offline knowledge library. Pick a starter pack below or skip ahead to choose individual ZIMs. You can always add more later.</p>
+
+    <div class="bundles" id="bundles"></div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="goStep(2)">Skip, choose individually</button>
+      <button class="btn primary" id="step1Next" onclick="goStep(2)" disabled>Continue with selection</button>
+    </div>
+  </div>
+
+  <!-- ========== STEP 2: ZIM picker ========== -->
+  <div class="step" id="step2">
+    <h1>Pick your ZIMs</h1>
+    <p class="lede">Each ZIM is an offline copy of a website or knowledge base. Check anything you want. The size meter updates live.</p>
+
+    <div class="disk-meter">
+      <div class="meter-row">
+        <div class="meter-stat">
+          <div class="label">Selected to download</div>
+          <div class="value" id="metricSelected">0 GB</div>
+        </div>
+        <div class="meter-stat">
+          <div class="label">Already on disk</div>
+          <div class="value" id="metricInstalled">0 GB</div>
+        </div>
+        <div class="meter-stat">
+          <div class="label">Free after download</div>
+          <div class="value" id="metricFree">··· GB</div>
+        </div>
+      </div>
+      <div class="meter-bar">
+        <div class="fill-existing" id="barInstalled"></div>
+        <div class="fill-selected" id="barSelected"></div>
+      </div>
+      <div class="meter-legend">
+        <span><span class="swatch sw-installed"></span> Installed</span>
+        <span><span class="swatch sw-selected"></span> New (this download)</span>
+        <span><span class="swatch sw-free"></span> Free disk</span>
+      </div>
+    </div>
+
+    <h2>Local AI model</h2>
+    <p class="lede" style="margin-top:0">The model that answers your questions using the ZIMs above. Bigger means smarter but slower.</p>
+    <div class="model-pick" id="modelPick">
+      <div class="model selected" data-model="3b">
+        <h4>Llama 3.2 3B</h4>
+        <div class="ms">2.7 GB</div>
+        <div class="md">Faster, lighter. Good for laptops with 8 GB RAM. Default.</div>
+      </div>
+      <div class="model" data-model="8b">
+        <h4>Llama 3.1 8B</h4>
+        <div class="ms">4.9 GB</div>
+        <div class="md">Smarter answers. Needs ~12 GB free RAM. Slower but worth it.</div>
+      </div>
+      <div class="model" data-model="none">
+        <h4>No model</h4>
+        <div class="ms">0 GB</div>
+        <div class="md">Skip the AI. You'll still get full Wikipedia search and browsing.</div>
+      </div>
+    </div>
+
+    <h2>Knowledge libraries</h2>
+    <div id="catalog"></div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="goStep(1)">← Back</button>
+      <button class="btn primary" id="step2Next" onclick="startDownload()" disabled>Start Download</button>
+    </div>
+  </div>
+
+  <!-- ========== STEP 3: Download progress ========== -->
+  <div class="step" id="step3">
+    <h1>Downloading…</h1>
+    <p class="lede">You can close this window. Downloads will keep going in the background. Reopen the wizard or visit the admin page anytime to check progress.</p>
+
+    <div class="summary" id="dlSummary">Starting…</div>
+    <div class="dl-list" id="dlList"></div>
+
+    <div class="btn-row" id="step3Buttons">
+      <button class="btn" onclick="window.location='/admin'">Open admin page</button>
+      <button class="btn primary" id="finishBtn" onclick="finishSetup()" disabled>Open Apocalypse →</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="signature">
+  <span>Built by <a href="/about">Henry Ratterman</a></span>
+  <span class="dot">·</span>
+  <span><a href="https://henryratterman.com" target="_blank" rel="noopener">henryratterman.com</a></span>
+  <span class="dot">·</span>
+  <span><a href="https://github.com/hratterman/apocalypse-drive" target="_blank" rel="noopener">GitHub</a></span>
+</div>
+
+<script>
+let CATALOG = null;
+let STATUS = null;
+const SELECTED = new Set();
+let MODEL_CHOICE = '3b';
+
+// ============= Init =============
+async function init() {
+  try {
+    const [catRes, statRes] = await Promise.all([
+      fetch('/api/catalog'),
+      fetch('/api/status'),
+    ]);
+    CATALOG = await catRes.json();
+    STATUS = await statRes.json();
+  } catch (e) {
+    document.body.innerHTML = '<div class="container"><h1>Cannot reach the shim</h1><p class="lede">The setup wizard needs the Apocalypse shim to be running. If you\'re not sure how, check the README.</p></div>';
+    return;
+  }
+  renderBundles();
+  renderCatalog();
+  updateMeter();
+  setupModelPick();
+}
+
+// ============= Bundles (Step 1) =============
+function renderBundles() {
+  const container = document.getElementById('bundles');
+  container.innerHTML = '';
+  for (const [key, bundle] of Object.entries(CATALOG.bundles)) {
+    const card = document.createElement('div');
+    card.className = 'bundle';
+    card.dataset.bundle = key;
+    card.innerHTML = `
+      <h3>${bundle.title}</h3>
+      <div class="size">${fmtBytes(bundle.size_bytes)} • ${bundle.ids.length} item${bundle.ids.length === 1 ? '' : 's'}</div>
+      <div class="desc">${bundle.description}</div>
+    `;
+    card.onclick = () => selectBundle(key, card);
+    container.appendChild(card);
+  }
+}
+
+function selectBundle(key, cardEl) {
+  document.querySelectorAll('.bundle').forEach(b => b.classList.remove('selected'));
+  cardEl.classList.add('selected');
+  SELECTED.clear();
+  for (const id of CATALOG.bundles[key].ids) SELECTED.add(id);
+  document.getElementById('step1Next').disabled = false;
+  // Sync checkboxes too
+  document.querySelectorAll('.zim input[type=checkbox]').forEach(cb => {
+    cb.checked = SELECTED.has(cb.dataset.id);
+    cb.closest('.zim').classList.toggle('selected', cb.checked);
+  });
+  updateMeter();
+}
+
+// ============= Catalog (Step 2) =============
+function renderCatalog() {
+  const container = document.getElementById('catalog');
+  container.innerHTML = '';
+  // Group by category in original order
+  const byCategory = {};
+  const order = [];
+  for (const item of CATALOG.items) {
+    if (!byCategory[item.category]) {
+      byCategory[item.category] = [];
+      order.push(item.category);
+    }
+    byCategory[item.category].push(item);
+  }
+  const installed = new Set(STATUS.installed_ids || []);
+
+  for (const cat of order) {
+    const section = document.createElement('div');
+    section.className = 'category';
+    section.innerHTML = `<h2>${cat}</h2>`;
+    const grid = document.createElement('div');
+    grid.className = 'zim-grid';
+    for (const item of byCategory[cat]) {
+      const isInstalled = installed.has(item.id);
+      const row = document.createElement('label');
+      row.className = 'zim' + (isInstalled ? ' installed' : '');
+      const badges = [];
+      if (item.essential) badges.push('<span class="badge essential">Essential</span>');
+      if (isInstalled) badges.push('<span class="badge installed">Installed</span>');
+      row.innerHTML = `
+        <input type="checkbox" data-id="${item.id}" data-size="${item.size_bytes}" ${isInstalled ? 'checked disabled' : ''}>
+        <div class="info">
+          <div class="row1">
+            <span class="title">${item.title}</span>
+            <span class="badges">${badges.join('')}</span>
+          </div>
+          <div class="subtitle">${item.subtitle}</div>
+          <div class="desc">${item.description}</div>
+        </div>
+        <div class="size">${fmtBytes(item.size_bytes)}</div>
+      `;
+      const cb = row.querySelector('input');
+      if (isInstalled) {
+        SELECTED.add(item.id); // count installed in meter as "already on disk"
+      }
+      cb.onchange = () => {
+        if (cb.checked) SELECTED.add(item.id);
+        else SELECTED.delete(item.id);
+        row.classList.toggle('selected', cb.checked);
+        updateMeter();
+      };
+      grid.appendChild(row);
+    }
+    section.appendChild(grid);
+    container.appendChild(section);
+  }
+}
+
+// ============= Meter =============
+function updateMeter() {
+  const installed = new Set(STATUS.installed_ids || []);
+  let selectedNew = 0;
+  let installedBytes = 0;
+  for (const item of CATALOG.items) {
+    if (installed.has(item.id)) installedBytes += item.size_bytes;
+    else if (SELECTED.has(item.id)) selectedNew += item.size_bytes;
+  }
+  // Add LLM size
+  if (MODEL_CHOICE === '3b') selectedNew += 2_700_000_000;
+  else if (MODEL_CHOICE === '8b') selectedNew += 4_900_000_000;
+
+  const free = STATUS.disk?.free || 0;
+  const total = STATUS.disk?.total || 1;
+  document.getElementById('metricSelected').textContent = fmtBytes(selectedNew);
+  document.getElementById('metricInstalled').textContent = fmtBytes(installedBytes);
+  const freeEl = document.getElementById('metricFree');
+  freeEl.textContent = fmtBytes(free - selectedNew);
+  freeEl.className = 'value ' + (
+    selectedNew > free ? 'bad' : (selectedNew > free * 0.8 ? 'warn' : 'good')
+  );
+
+  const installedPct = (installedBytes / total) * 100;
+  const selectedPct = (selectedNew / total) * 100;
+  const barI = document.getElementById('barInstalled');
+  const barS = document.getElementById('barSelected');
+  barI.style.width = installedPct + '%';
+  barS.style.left = installedPct + '%';
+  barS.style.width = Math.min(selectedPct, 100 - installedPct) + '%';
+  if (selectedNew > free) barS.style.background = 'var(--bad)';
+  else barS.style.background = 'var(--accent)';
+
+  // Update Step 2 next button
+  const newCount = [...SELECTED].filter(id => !installed.has(id)).length;
+  const nextBtn = document.getElementById('step2Next');
+  nextBtn.disabled = newCount === 0 || selectedNew > free;
+  nextBtn.textContent = newCount === 0 ? 'Nothing selected' :
+                       (selectedNew > free ? 'Not enough disk' :
+                       `Start Download (${newCount} ZIM${newCount === 1 ? '' : 's'} + model)`);
+}
+
+// ============= Model picker =============
+function setupModelPick() {
+  document.querySelectorAll('.model').forEach(el => {
+    el.onclick = () => {
+      document.querySelectorAll('.model').forEach(m => m.classList.remove('selected'));
+      el.classList.add('selected');
+      MODEL_CHOICE = el.dataset.model;
+      updateMeter();
+    };
+  });
+}
+
+// ============= Step transitions =============
+function goStep(n) {
+  for (let i = 1; i <= 3; i++) {
+    document.getElementById('step' + i).classList.toggle('active', i === n);
+    const pill = document.getElementById('pill' + i);
+    pill.classList.remove('active', 'done');
+    if (i < n) pill.classList.add('done');
+    if (i === n) pill.classList.add('active');
+  }
+  window.scrollTo(0, 0);
+}
+
+// ============= Download (Step 3) =============
+let progressTimer = null;
+
+async function startDownload() {
+  const installed = new Set(STATUS.installed_ids || []);
+  const ids = [...SELECTED].filter(id => !installed.has(id));
+  if (ids.length === 0) { toast('Nothing new to download'); return; }
+
+  goStep(3);
+  try {
+    const res = await fetch('/api/download/start', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ids, model: MODEL_CHOICE}),
+    });
+    const data = await res.json();
+    toast(`Started ${data.started.length} downloads`);
+  } catch (e) {
+    toast('Failed to start: ' + e.message);
+    return;
+  }
+  pollProgress();
+}
+
+async function pollProgress() {
+  if (progressTimer) clearInterval(progressTimer);
+  progressTimer = setInterval(refreshProgress, 1500);
+  refreshProgress();
+}
+
+async function refreshProgress() {
+  try {
+    const res = await fetch('/api/download/progress');
+    const data = await res.json();
+    renderDownloads(data.downloads);
+    // Check if all done
+    const inProgress = data.downloads.filter(d => d.status === 'queued' || d.status === 'downloading').length;
+    if (inProgress === 0 && data.downloads.length > 0) {
+      clearInterval(progressTimer);
+      document.getElementById('finishBtn').disabled = false;
+    }
+  } catch (e) {}
+}
+
+function renderDownloads(downloads) {
+  const list = document.getElementById('dlList');
+  if (downloads.length === 0) {
+    list.innerHTML = '<div class="empty-hint">Waiting for downloads to start…</div>';
+    return;
+  }
+  list.innerHTML = '';
+  let totalBytes = 0, downloadedBytes = 0;
+  let doneCount = 0;
+  for (const d of downloads) {
+    totalBytes += d.total || 0;
+    downloadedBytes += d.downloaded || 0;
+    if (d.status === 'done') doneCount++;
+    const pct = d.total > 0 ? Math.min(100, (d.downloaded / d.total) * 100) : 0;
+    const fillClass = d.status === 'done' ? 'done' : (d.status === 'error' ? 'error' : '');
+    const row = document.createElement('div');
+    row.className = 'dl-row';
+    row.innerHTML = `
+      <div class="top">
+        <div class="name">${d.name}</div>
+        <div class="stats">
+          <span class="status ${d.status}">${d.status}</span>
+          ${d.total > 0 ? ` · ${fmtBytes(d.downloaded)} / ${fmtBytes(d.total)} · ${pct.toFixed(1)}%` : ''}
+          ${d.error ? ` · ${d.error}` : ''}
+        </div>
+      </div>
+      <div class="dl-bar"><div class="fill ${fillClass}" style="width:${pct}%"></div></div>
+    `;
+    list.appendChild(row);
+  }
+  const overallPct = totalBytes > 0 ? (downloadedBytes / totalBytes * 100).toFixed(1) : 0;
+  document.getElementById('dlSummary').innerHTML =
+    `<strong>${doneCount} / ${downloads.length}</strong> complete · <strong>${fmtBytes(downloadedBytes)} / ${fmtBytes(totalBytes)}</strong> · ${overallPct}% overall`;
+}
+
+async function finishSetup() {
+  // Mark setup complete + restart shim to load new ZIMs
+  await fetch('/api/setup/complete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({model: MODEL_CHOICE}),
+  });
+  await fetch('/api/services/restart', {method: 'POST'});
+  // Brief pause then redirect to main UI
+  toast('Loading your library…');
+  setTimeout(() => { window.location = '/'; }, 1200);
+}
+
+// ============= Helpers =============
+function fmtBytes(n) {
+  if (!n) return '0 B';
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
+  if (n < 1099511627776) return (n / 1073741824).toFixed(1) + ' GB';
+  return (n / 1099511627776).toFixed(2) + ' TB';
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+init();
+</script>
+
+</body>
+</html>

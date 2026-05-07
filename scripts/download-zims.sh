@@ -1,5 +1,5 @@
 #!/bin/bash
-# Kiwix ZIM downloader — resumable, correct URLs verified May 2026
+# Kiwix ZIM downloader (resumable, correct URLs verified May 2026)
 # Skips files already fully downloaded. Resumes .part files.
 
 ZIM_DIR="/Volumes/Media/apocalypse/kiwix/zim"
@@ -34,7 +34,7 @@ download() {
     chmod 644 "$dest"
     log "DONE: $name"
   else
-    log "FAILED (exit $code): $name — partial kept for resume"
+    log "FAILED (exit $code): $name, partial kept for resume"
   fi
 }
 
@@ -52,7 +52,7 @@ download "gutenberg_en_all_2025-11.zim" \
 download "stackoverflow.com_en_all_2023-11.zim" \
   "$BASE/stack_exchange/stackoverflow.com_en_all_2023-11.zim"
 
-# Khan Academy (~168 GB) — lives in /other/
+# Khan Academy (~168 GB) lives in /other/
 download "khanacademy_en_all_2023-03.zim" \
   "$BASE/other/khanacademy_en_all_2023-03.zim"
 
@@ -68,7 +68,7 @@ download "wikibooks_en_all_maxi_2026-04.zim" \
 download "wikisource_en_all_maxi_2026-02.zim" \
   "$BASE/wikisource/wikisource_en_all_maxi_2026-02.zim"
 
-# Wikispecies (~3.2 GB) — lives in /other/
+# Wikispecies (~3.2 GB) lives in /other/
 download "wikispecies_en_all_maxi_2026-04.zim" \
   "$BASE/other/wikispecies_en_all_maxi_2026-04.zim"
 
