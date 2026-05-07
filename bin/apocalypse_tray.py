@@ -49,6 +49,29 @@ except ImportError:
     sys.exit(1)
 
 
+# ---- Early launch log ------------------------------------------------------
+# Bundled .app on macOS has no stdout/stderr visible to the user. If the app
+# hangs or crashes during startup (e.g. a wedged USB drive blocking stat() on
+# /Volumes), there's no way to diagnose without this log. Write progress to a
+# known location starting from line 1.
+_LAUNCH_LOG_PATH = Path.home() / '.apocalypse_launch.log'
+
+def _llog(msg):
+    try:
+        with open(_LAUNCH_LOG_PATH, 'a', encoding='utf-8') as f:
+            f.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
+            f.flush()
+    except Exception:
+        pass
+
+# Truncate previous log on each launch so it stays readable
+try:
+    _LAUNCH_LOG_PATH.write_text(f"=== Apocalypse launch {time.strftime('%Y-%m-%d %H:%M:%S')} pid={os.getpid()} ===\n", encoding='utf-8')
+except Exception:
+    pass
+_llog(f"argv={sys.argv} platform={sys.platform} python={sys.version.split()[0]}")
+
+
 # ---- Path resolution -------------------------------------------------------
 
 def find_install_dir():
@@ -93,13 +116,55 @@ def find_install_dir():
     if (candidate / 'kiwix' / 'zim').exists() or (candidate / 'state.json').exists():
         return candidate
 
-    # Search common paths
+    # Search common paths.
+    # NOTE: stat()ing /Volumes/<drive>/apocalypse can hang indefinitely if a
+    # mounted drive is in a wedged state (fskit/exFAT bugs on macOS, stale NFS
+    # mounts, USB drives that went to sleep). We protect every probe with a
+    # short thread-based timeout so a single bad volume cannot freeze the app
+    # at launch with zero error message.
+    def _exists_with_timeout(path, timeout=1.0):
+        result = [False]
+        def _probe():
+            try:
+                result[0] = path.exists()
+            except Exception:
+                result[0] = False
+        t = threading.Thread(target=_probe, daemon=True)
+        t.start()
+        t.join(timeout=timeout)
+        return result[0] if not t.is_alive() else False
+
+    def _is_usable_dir(path, timeout=2.0):
+        """Stronger check: directory exists AND we can listdir() it.
+        Catches drives where stat() works but readdir() is wedged (fskit bug).
+        """
+        if not _exists_with_timeout(path, 1.0):
+            return False
+        result = [False]
+        def _probe():
+            try:
+                os.listdir(str(path))
+                result[0] = True
+            except Exception:
+                result[0] = False
+        t = threading.Thread(target=_probe, daemon=True)
+        t.start()
+        t.join(timeout=timeout)
+        return result[0] if not t.is_alive() else False
+
     candidates = []
-    if sys.platform == 'darwin' and Path('/Volumes').exists():
-        for d in os.listdir('/Volumes'):
+    if sys.platform == 'darwin' and _exists_with_timeout(Path('/Volumes'), 1.0):
+        try:
+            volumes = os.listdir('/Volumes')
+        except OSError:
+            volumes = []
+        for d in volumes:
             c = Path('/Volumes') / d / 'apocalypse'
-            if c.exists():
+            # Use the stronger usability check for external volumes.
+            if _is_usable_dir(c, 2.0):
                 candidates.append(c)
+            else:
+                _llog(f"skipping wedged or missing /Volumes/{d}/apocalypse")
     candidates += [
         Path.home() / 'Apocalypse',
         Path.home() / 'apocalypse',
@@ -109,7 +174,7 @@ def find_install_dir():
         candidates.append(Path('C:/Apocalypse'))
 
     for c in candidates:
-        if c and c.exists():
+        if c and _exists_with_timeout(c, 1.0):
             return c
 
     # Default: ~/Apocalypse (created on first run)
@@ -627,6 +692,7 @@ class ApocalypseApp:
 
 
 if __name__ == '__main__':
+    _llog("entered __main__")
     # PyInstaller-aware multitool dispatch:
     # When the bundled .app spawns a subprocess via sys.executable, that subprocess
     # IS the bundle launcher (not a separate Python). If we just point it at
@@ -635,6 +701,7 @@ if __name__ == '__main__':
     # tray UI". The tray's ShimManager.start() passes --run-shim followed by
     # the rest of the shim args.
     if len(sys.argv) > 1 and sys.argv[1] == '--run-shim':
+        _llog("dispatching to kiwix_shim.main()")
         # Replace argv with the rest, then exec the shim's main()
         sys.argv = [sys.argv[0]] + sys.argv[2:]
         # Find and exec kiwix_shim
@@ -647,8 +714,17 @@ if __name__ == '__main__':
         kiwix_shim.main()
         sys.exit(0)
 
-    app = ApocalypseApp()
+    _llog("constructing ApocalypseApp")
+    app = None
     try:
+        app = ApocalypseApp()
+        _llog("ApocalypseApp constructed, calling run()")
         app.run()
     except KeyboardInterrupt:
-        app.quit_app()
+        if app is not None:
+            app.quit_app()
+    except Exception as e:
+        import traceback
+        _llog(f"FATAL: {type(e).__name__}: {e}")
+        _llog(traceback.format_exc())
+        raise
