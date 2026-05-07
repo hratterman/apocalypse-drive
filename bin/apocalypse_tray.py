@@ -709,6 +709,13 @@ class ApocalypseApp:
                         # Auto-open the wizard on first run
                         webbrowser.open(self.url('/setup'))
 
+                # Self-heal SHIM: respawn if subprocess died. Without this,
+                # menu bar icon can show stale "alive" state while ECONNREFUSED
+                # on the actual port.
+                if not self.shim.is_running():
+                    _llog("health_loop: shim died, respawning")
+                    threading.Thread(target=self.shim.start, daemon=True).start()
+
                 # Self-heal LLM: if a llamafile appears on disk later (e.g.
                 # downloaded via wizard after boot), start it. Idempotent
                 # via is_running() short-circuit.
@@ -866,6 +873,15 @@ if _USE_RUMPS:
                     else:
                         # Already set up — open main page so user lands somewhere useful
                         webbrowser.open(self.core.url('/'))
+
+                # Self-heal SHIM: if the shim subprocess died (port 8888 dead),
+                # respawn it. Covers the case where the user pkill'd the shim
+                # but not the tray, or the shim crashed mid-session. Without
+                # this, the menu bar can stay visually "alive" with green icon
+                # cached state while the wizard/landing page returns ECONNREFUSED.
+                if not self.core.shim.is_running():
+                    _llog("tick: shim died, respawning")
+                    threading.Thread(target=self.core.shim.start, daemon=True).start()
 
                 # Self-heal LLM: if a llamafile is on disk but the process
                 # isn't running, start it. Covers the common case where the
