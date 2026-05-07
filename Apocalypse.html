@@ -479,6 +479,8 @@
 
   header .status.ok .dot { background: var(--ok); color: var(--ok); }
   header .status.err .dot { background: var(--warn); color: var(--warn); }
+  header .status.notice .dot { background: var(--text-dim); color: var(--text-dim); }
+  header .status.notice { color: var(--text-dim); }
 
   main {
     flex: 1;
@@ -1007,7 +1009,7 @@ async function checkServices() {
       if (sr.ok) {
         const st = await sr.json();
         kiwixOk = true;
-        kiwixData = { zims: (st.installed_ids || []).length };
+        kiwixData = { zims: (st.installed_ids || []).length, model: st.model };
       } else {
         const r = await fetch(KIWIX + '/');
         kiwixOk = r.ok || r.status === 302;
@@ -1051,9 +1053,16 @@ async function checkServices() {
     return { kiwixOk, llamaOk };
   }
 
+  // User explicitly chose "no model" during setup -> search-only mode.
+  // Treat LLM-offline as a soft notice, not an error.
+  const userOptedOutOfLLM = kiwixData && kiwixData.model === 'none';
+
   if (kiwixOk && llamaOk) {
     statusEl.className = 'status ok';
     statusText.textContent = 'ALL SYSTEMS ONLINE';
+  } else if (kiwixOk && userOptedOutOfLLM) {
+    statusEl.className = 'status notice';
+    statusText.textContent = 'SEARCH-ONLY MODE';
   } else if (kiwixOk) {
     statusEl.className = 'status err';
     statusText.textContent = 'LLM OFFLINE';

@@ -193,6 +193,22 @@ def save_state(state):
     tmp.replace(p)
 
 
+def _persist_state_after_download():
+    """Mirror disk-derived installed_ids into state.json so theme/model
+    preferences from the wizard survive across restarts even if the user
+    never explicitly clicked 'Setup Complete'. This is a soft-persistence
+    layer: installed_ids() always returns the truth from disk, but state.json
+    tracks user preferences (theme, chosen model) which are otherwise lost
+    until the wizard's final step.
+    """
+    if _INSTALL_DIR is None:
+        return
+    st = load_state()
+    st['installed_ids'] = installed_ids()
+    # Don't flip setup_complete here. That's the wizard's call.
+    save_state(st)
+
+
 # --- Disk helpers -----------------------------------------------------------
 
 def disk_for(path):
@@ -328,6 +344,16 @@ class Download:
             try:
                 if self.dest_path.suffix == '.zim':
                     _schedule_shim_reload()
+            except Exception:
+                pass
+            # Persist installed catalog id + current model selection so the
+            # state survives a clean shutdown even if the user never finishes
+            # the wizard's "Setup Complete" step. installed_ids() is
+            # disk-derived and authoritative, but we mirror it into state.json
+            # for diagnostics and so the wizard's resume logic has somewhere
+            # to read theme/model preferences from on the very next launch.
+            try:
+                _persist_state_after_download()
             except Exception:
                 pass
         except Exception as e:
@@ -585,7 +611,7 @@ def dispatch_get(path, qs):
             'theme': st.get('theme', 'terminal'),
             'model': st.get('model', '3b'),
             'disk': disk_for(_INSTALL_DIR),
-            'version': '1.3.0',
+            'version': '1.3.2',
             'author': 'Henry Ratterman',
             'author_url': 'https://henryratterman.com',
         })
@@ -621,6 +647,14 @@ def dispatch_post(path, body):
     if path == '/api/download/start':
         ids = body.get('ids', [])
         model = body.get('model', '3b')
+        # Persist the model choice immediately so a crash mid-download
+        # doesn't lose it.
+        try:
+            st = load_state()
+            st['model'] = model
+            save_state(st)
+        except Exception:
+            pass
         started = start_downloads(ids, model)
         return _json_response({'started': started})
     if path == '/api/download/start_url':

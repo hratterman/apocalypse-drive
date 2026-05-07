@@ -291,10 +291,14 @@ jobs:
 
       - name: Zip portable bundle
         run: |
+          # Zip the contents of apocalypse-drive/ directly (no wrapper folder).
+          # User unzips to drive root and gets Apocalypse.html, README.txt,
+          # macos/, windows/, linux/, apocalypse/ at top level. No nested
+          # folder to navigate into.
           mkdir -p release
-          cd portable
-          zip -r ../release/apocalypse-drive.zip apocalypse-drive
-          cd ..
+          cd portable/apocalypse-drive
+          zip -r ../../release/apocalypse-drive.zip . -x "*.DS_Store"
+          cd ../..
           ls -la release/
 
       - name: Upload artifact

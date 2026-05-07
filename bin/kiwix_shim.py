@@ -367,6 +367,55 @@ def gather_candidates(question, max_candidates=6):
             archive = ARCHIVES.get(book)
             if not archive:
                 continue
+            # Try title-suggestion first. Works on every ZIM regardless of
+            # whether the publisher built a Xapian full-text index. Many ZIMs
+            # (PhET, niche encyclopedias, Stack Exchange snapshots) ship
+            # without FT indexes, so Searcher() raises "Cannot create Search
+            # without FT Xapian index" and silently swallowing that left us
+            # with zero candidates. SuggestionSearcher walks the title list,
+            # so it always works.
+            try:
+                ss = SuggestionSearcher(archive)
+                # Try cleaned full query, then individual content words.
+                title_queries = [cleaned] + [w for w in cleaned.split() if len(w) > 2]
+                seen_in_book = set()
+                for tq in title_queries:
+                    if not tq.strip():
+                        continue
+                    sug = list(ss.suggest(tq).getResults(0, 3))
+                    sug = [h for h in sug if not is_disambig_or_stub_path(h) and h not in seen_in_book]
+                    for h in sug:
+                        seen_in_book.add(h)
+                        try:
+                            e = archive.get_entry_by_path(h)
+                            if e.is_redirect:
+                                e = e.get_redirect_entry()
+                            path, title = e.path, e.title or e.path
+                        except Exception:
+                            path, title = h, h
+                        key = (book, path)
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        candidates.append({
+                            'book': book, 'path': path, 'title': title,
+                            'source': 'suggest',
+                        })
+                        if len(candidates) >= max_candidates:
+                            break
+                    if len(candidates) >= max_candidates:
+                        break
+                    # If the cleaned query already produced hits, don't dilute
+                    # with single-word fallbacks that match many things.
+                    if sug and tq == cleaned:
+                        break
+            except Exception:
+                pass
+
+            # Then full-text. Many ZIMs lack a Xapian FT index; the
+            # exception is expected and not an error.
+            if len(candidates) >= max_candidates:
+                break
             try:
                 s = Searcher(archive)
                 q = Query().set_query(cleaned)
@@ -392,6 +441,8 @@ def gather_candidates(question, max_candidates=6):
                     if len(candidates) >= max_candidates:
                         break
             except Exception:
+                # No FT index on this ZIM. SuggestionSearcher above already
+                # ran; we tried our best.
                 pass
             if len(candidates) >= max_candidates:
                 break
@@ -991,7 +1042,19 @@ class Handler(BaseHTTPRequestHandler):
             answer = llm_complete(answer_system, user_msg,
                                   max_tokens=600, temperature=0.3, timeout=180)
         except Exception as e:
-            answer = f"[LLM error: {e}]"
+            # Graceful search-only mode: when the LLM isn't running, return
+            # the sources without a synthesized answer rather than a scary
+            # "[LLM error: ...]" message. The frontend can render the
+            # sources directly so the user still gets useful results.
+            err_msg = str(e).lower()
+            if 'connection refused' in err_msg or 'connection reset' in err_msg or 'no route' in err_msg:
+                answer = (
+                    "Search-only mode: the local LLM isn't running, so I can't "
+                    "synthesize an answer. The relevant sources from your "
+                    "offline library are listed below. Click any to read."
+                )
+            else:
+                answer = f"[LLM error: {e}]"
         timing['answer'] = round(time.time() - t0, 2)
 
         return self._json(200, {
