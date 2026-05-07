@@ -24,6 +24,7 @@ State lives in <install_dir>/state.json. Downloads run in background threads
 using urllib (no external deps). Resume via Range header.
 """
 import json
+import sys
 import os
 import shutil
 import threading
@@ -52,6 +53,29 @@ _HYDRATION_LOCK = threading.Lock()
 _DOWNLOADS = {}            # id -> Download object
 _DOWNLOADS_LOCK = threading.Lock()
 _SHIM_RESTART_HOOK = None  # callable: triggers shim to reload ZIMs
+_RELOAD_TIMER = None       # debounce timer for shim reloads
+_RELOAD_LOCK = threading.Lock()
+
+
+def _schedule_shim_reload(delay=2.0):
+    """Schedule a shim ZIM reload, debounced.
+
+    Multiple ZIMs finishing in quick succession collapse into a single
+    reload after the last one. Without debouncing, a 4-ZIM batch would
+    trigger 4 sequential ARCHIVES rebuilds, each scanning every .zim file.
+    """
+    global _RELOAD_TIMER
+    if _SHIM_RESTART_HOOK is None:
+        return
+    with _RELOAD_LOCK:
+        if _RELOAD_TIMER is not None:
+            try:
+                _RELOAD_TIMER.cancel()
+            except Exception:
+                pass
+        _RELOAD_TIMER = threading.Timer(delay, _SHIM_RESTART_HOOK)
+        _RELOAD_TIMER.daemon = True
+        _RELOAD_TIMER.start()
 
 
 def init(install_dir, catalog_path, restart_hook=None):
@@ -270,6 +294,16 @@ class Download:
             self.part_path.rename(self.dest_path)
             self.status = 'done'
             self.finished_at = time.time()
+            # If this was a ZIM, the running shim hasn't loaded it yet.
+            # Trigger a debounced restart so ARCHIVES picks it up and the
+            # user can actually open what they just downloaded. Debouncing
+            # collapses the 1-per-ZIM restart bursts during multi-download
+            # runs into a single restart after the last one.
+            try:
+                if self.dest_path.suffix == '.zim':
+                    _schedule_shim_reload()
+            except Exception:
+                pass
         except Exception as e:
             self.status = 'error'
             self.error = f"{type(e).__name__}: {e}"
@@ -387,6 +421,32 @@ def _read_template(name):
     return p.read_text(encoding='utf-8')
 
 
+def _read_landing_page():
+    """Load Apocalypse.html (the polished landing page) from the bundle.
+
+    Search order (PyInstaller / source / dev all covered):
+      1. sys._MEIPASS/Apocalypse.html         (PyInstaller bundle root)
+      2. <bin parent>/Apocalypse.html         (source repo root)
+      3. bin/templates/Apocalypse.html        (fallback if we move it later)
+
+    Returns None if not found, so callers can fall back to a stub.
+    """
+    candidates = []
+    meipass = getattr(sys, '_MEIPASS', None)
+    if meipass:
+        candidates.append(Path(meipass) / 'Apocalypse.html')
+    here = Path(__file__).parent
+    candidates.append(here.parent / 'Apocalypse.html')
+    candidates.append(here / 'templates' / 'Apocalypse.html')
+    for p in candidates:
+        try:
+            if p.exists():
+                return p.read_text(encoding='utf-8')
+        except Exception:
+            continue
+    return None
+
+
 # --- Dispatch ---------------------------------------------------------------
 
 def dispatch_get(path, qs):
@@ -397,6 +457,19 @@ def dispatch_get(path, qs):
     if path == '/setup':
         body = _read_template('setup.html').encode('utf-8')
         return 200, [('Content-Type', 'text/html; charset=utf-8')], body
+    if path == '/' or path == '/index.html':
+        # First-run UX: if setup hasn't been completed yet, redirect to the
+        # wizard. Otherwise serve the polished Apocalypse.html landing page
+        # (terminal theme, search, RAG chat).
+        st = load_state()
+        if not st.get('setup_complete', False) and not installed_ids():
+            return 302, [('Location', '/setup')], b''
+        landing = _read_landing_page()
+        if landing is None:
+            # Bundle didn't ship Apocalypse.html. Fall through to the shim's
+            # stub _index() so the user at least sees a list of ZIMs.
+            return None
+        return 200, [('Content-Type', 'text/html; charset=utf-8')], landing.encode('utf-8')
     if path == '/admin':
         body = _read_template('admin.html').encode('utf-8')
         return 200, [('Content-Type', 'text/html; charset=utf-8')], body
@@ -448,13 +521,24 @@ def dispatch_get(path, qs):
             'theme': st.get('theme', 'terminal'),
             'model': st.get('model', '3b'),
             'disk': disk_for(_INSTALL_DIR),
-            'version': '1.1.2',
+            'version': '1.2.0',
             'author': 'Henry Ratterman',
             'author_url': 'https://henryratterman.com',
         })
     if path == '/api/disk':
         target = (qs.get('path') or [str(_INSTALL_DIR)])[0]
         return _json_response(disk_for(target))
+    if path == '/api/drives':
+        try:
+            from drives import list_drives
+            return _json_response({'drives': list_drives()})
+        except Exception as e:
+            return _json_response({'drives': [], 'error': str(e)})
+    if path == '/api/install-dir':
+        return _json_response({
+            'path': str(_INSTALL_DIR),
+            'disk': disk_for(_INSTALL_DIR),
+        })
     if path == '/api/download/progress':
         return _json_response({
             'downloads': downloads_snapshot(),
@@ -511,6 +595,37 @@ def dispatch_post(path, body):
         if _SHIM_RESTART_HOOK:
             _SHIM_RESTART_HOOK()
         return _json_response({'ok': True})
+    if path == '/api/install-dir':
+        # Set/relocate the install directory. Validates writability and
+        # available space, persists choice via .apocalypse_install file in
+        # the user's home, then triggers a shim restart pointing at the new
+        # path. The frontend should poll /api/status until the server comes
+        # back, then continue the wizard.
+        new_path = (body.get('path') or '').strip()
+        if not new_path:
+            return _json_response({'ok': False, 'error': 'No path provided'})
+        try:
+            from drives import validate_install_path
+            ok, reason, info = validate_install_path(new_path)
+        except Exception as e:
+            return _json_response({'ok': False, 'error': f'Validation failed: {e}'})
+        if not ok:
+            return _json_response({'ok': False, 'error': reason, 'disk': info})
+        # Persist the choice so the next launch picks it up.
+        try:
+            pointer = Path.home() / '.apocalypse_install'
+            pointer.write_text(str(Path(new_path).resolve()), encoding='utf-8')
+        except Exception as e:
+            return _json_response({'ok': False, 'error': f'Cannot save pointer: {e}'})
+        # Trigger restart; the tray will reread the pointer and re-init at
+        # the new path. We respond before the shim shuts down.
+        if _SHIM_RESTART_HOOK:
+            import threading as _th
+            _th.Timer(0.3, _SHIM_RESTART_HOOK).start()
+        return _json_response({
+            'ok': True, 'path': str(Path(new_path).resolve()),
+            'restart': True,
+        })
     if path == '/api/config':
         st = load_state()
         st.update(body)

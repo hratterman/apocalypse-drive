@@ -55,12 +55,31 @@ def find_install_dir():
     """Find the apocalypse install dir (where ZIMs/LLMs/state live).
 
     Search order:
+      0. ~/.apocalypse_install pointer file (set by the wizard's drive picker)
       1. APOCALYPSE_DIR env var
       2. The directory containing this script's parent (bin/.. == install_dir)
          (only if that dir has actual data: kiwix/zim/ or state.json)
       3. Common locations: /Volumes/*/apocalypse, ~/Apocalypse, etc.
       4. Default: ~/Apocalypse (created on first run)
     """
+    # 0. Pointer file written by the wizard's drive picker. This is THE way
+    # users tell us "put my data on the external drive" without env vars.
+    pointer = Path.home() / '.apocalypse_install'
+    if pointer.exists():
+        try:
+            target = pointer.read_text(encoding='utf-8').strip()
+            if target:
+                p = Path(target).expanduser().resolve()
+                # Be tolerant: if the drive isn't mounted, fall through to
+                # the rest of the search instead of crashing.
+                try:
+                    p.mkdir(parents=True, exist_ok=True)
+                    return p
+                except (OSError, PermissionError):
+                    pass
+        except Exception:
+            pass
+
     env = os.environ.get('APOCALYPSE_DIR')
     if env:
         p = Path(env).resolve()
@@ -257,6 +276,174 @@ class ShimManager:
         self.start()
 
 
+# ---- LLM server management -------------------------------------------------
+
+class LlamaServerManager:
+    """Run a .llamafile from <install_dir>/llm/ as a child process on port 8081.
+
+    The shim makes RAG calls to LLAMAFILE_URL (default http://127.0.0.1:8081).
+    Without this manager nothing ever starts the .llamafile, so the LLM
+    feature is dead even after the user downloads the model. We mirror
+    ShimManager's process-group hygiene so the LLM dies when the tray dies.
+    """
+
+    PORT = 8081
+
+    def __init__(self, install_dir):
+        self.install_dir = Path(install_dir)
+        self.llm_dir = self.install_dir / 'llm'
+        self.process = None
+        self.model_path = None
+        self.log_path = self.install_dir / 'logs' / 'llamafile.log'
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def find_model(self):
+        """Pick the best available .llamafile (prefer 8B if RAM >= 12 GB).
+
+        Returns Path or None if no model is installed.
+        """
+        if not self.llm_dir.exists():
+            return None
+        candidates = sorted(self.llm_dir.glob('*.llamafile')) + \
+                     sorted(self.llm_dir.glob('*.gguf'))
+        if not candidates:
+            return None
+        # Heuristic: pick the largest model the system can probably run.
+        # >=12 GB RAM -> any. <12 GB -> avoid 8B, prefer 3B.
+        try:
+            import psutil  # noqa: optional
+            total_gb = psutil.virtual_memory().total / (1024 ** 3)
+        except ImportError:
+            total_gb = 16  # assume capable if we can't check
+        if total_gb < 12:
+            small = [c for c in candidates if '3B' in c.name or '3b' in c.name]
+            if small:
+                return small[0]
+        # Prefer 8B if present and we have RAM.
+        big = [c for c in candidates if '8B' in c.name or '8b' in c.name]
+        if big and total_gb >= 12:
+            return big[0]
+        return candidates[0]
+
+    def is_running(self):
+        try:
+            with urllib.request.urlopen(
+                f'http://127.0.0.1:{self.PORT}/v1/models', timeout=1.0
+            ) as r:
+                return r.status == 200
+        except Exception:
+            return False
+
+    def start(self):
+        """Launch the .llamafile if a model is installed and one isn't running."""
+        if self.is_running():
+            return
+        if self.process is not None and self.process.poll() is None:
+            return
+        model = self.find_model()
+        if model is None:
+            return  # No model installed yet; user can download via wizard.
+        self.model_path = model
+
+        # Make the .llamafile executable on POSIX (a fresh download is 0644).
+        if sys.platform != 'win32':
+            try:
+                os.chmod(model, 0o755)
+            except OSError:
+                pass
+
+        # Build command. llamafiles are self-extracting on macOS / Linux. On
+        # Windows they need to be renamed to .exe to run; we copy/rename
+        # lazily on first start.
+        if sys.platform == 'win32':
+            exe_path = model.with_suffix('.exe')
+            if not exe_path.exists():
+                try:
+                    import shutil as _sh
+                    _sh.copy2(model, exe_path)
+                except Exception:
+                    pass
+            cmd = [str(exe_path)]
+        else:
+            cmd = ['/bin/sh', str(model)]
+
+        cmd += [
+            '--server', '--nobrowser',
+            '--host', '127.0.0.1',
+            '--port', str(self.PORT),
+            '-c', '4096',                # context length
+            '-ngl', '999',               # offload all layers to GPU if available
+        ]
+
+        log_fp = open(self.log_path, 'a', buffering=1)
+        log_fp.write(f"\n=== llamafile start: {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+        log_fp.write(f"model: {model}\n")
+        log_fp.write(f"cmd: {' '.join(cmd)}\n")
+        log_fp.flush()
+
+        kwargs = {
+            'stdout': log_fp, 'stderr': subprocess.STDOUT,
+            'cwd': str(self.install_dir),
+        }
+        if sys.platform == 'win32':
+            kwargs['creationflags'] = (
+                subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+            )
+        else:
+            kwargs['start_new_session'] = True
+        try:
+            self.process = subprocess.Popen(cmd, **kwargs)
+        except (FileNotFoundError, PermissionError, OSError) as e:
+            log_fp.write(f"FAILED to spawn llamafile: {e}\n")
+            self.process = None
+
+    def stop(self):
+        proc = self.process
+        if not proc or proc.poll() is not None:
+            self.process = None
+            return
+        try:
+            if sys.platform == 'win32':
+                try:
+                    proc.send_signal(signal.CTRL_BREAK_EVENT)
+                except Exception:
+                    pass
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    subprocess.call(
+                        ['taskkill', '/F', '/T', '/PID', str(proc.pid)],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    )
+            else:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                except (ProcessLookupError, PermissionError):
+                    proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except (ProcessLookupError, PermissionError):
+                        proc.kill()
+                    try:
+                        proc.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        pass
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
+        self.process = None
+
+    def restart(self):
+        self.stop()
+        time.sleep(0.5)
+        self.start()
+
+
 # ---- Tray icon -------------------------------------------------------------
 
 def make_icon(color='gray'):
@@ -286,13 +473,15 @@ class ApocalypseApp:
         self.code_dir = find_code_dir()
         port = int(os.environ.get('APOCALYPSE_PORT', '8888'))
         self.shim = ShimManager(self.install_dir, self.code_dir, port=port)
+        self.llama = LlamaServerManager(self.install_dir)
         self.icon = None
         self.last_health = None
 
         # Belt-and-suspenders cleanup: no matter how this process dies (menu
-        # Quit, Force Quit, parent crash, SIGTERM from launchd), the child
-        # shim must die too. Without this, the child holds files in the .app
-        # bundle and Finder refuses to trash the app.
+        # Quit, Force Quit, parent crash, SIGTERM from launchd), all child
+        # processes (shim AND llamafile) must die too. Without this, they
+        # hold files in the .app bundle and Finder refuses to trash the app.
+        atexit.register(self.llama.stop)
         atexit.register(self.shim.stop)
         for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
             try:
@@ -303,9 +492,9 @@ class ApocalypseApp:
 
     def _signal_exit(self, signum, frame):
         try:
+            self.llama.stop()
             self.shim.stop()
         finally:
-            # Re-raise default behavior so the process actually exits.
             sys.exit(0)
 
     def url(self, path=''):
@@ -354,6 +543,7 @@ class ApocalypseApp:
             subprocess.call(['xdg-open', str(self.install_dir)])
 
     def quit_app(self, icon=None, item=None):
+        self.llama.stop()
         self.shim.stop()
         if self.icon:
             self.icon.stop()
@@ -412,6 +602,13 @@ class ApocalypseApp:
     def run(self):
         # Start the shim
         self.shim.start()
+
+        # Start the LLM server in the background. Non-blocking: if no model
+        # is installed yet (first run), this is a silent no-op. The wizard
+        # downloads a .llamafile, then the user reopens the app and the LLM
+        # boots automatically. We could also restart it after a successful
+        # LLM download, but a tray relaunch is simpler and equally reliable.
+        threading.Thread(target=self.llama.start, daemon=True).start()
 
         # Build the tray icon
         self.icon = pystray.Icon(

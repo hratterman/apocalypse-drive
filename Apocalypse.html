@@ -911,6 +911,17 @@ async function probePort(port, healthPath) {
 }
 
 async function autoDetectPorts() {
+  // If we're being served by the shim itself (which happens when Apocalypse.html
+  // is rendered at /), use window.location for KIWIX. This is the .app case:
+  // the shim routes / to this page, so the same origin already IS the shim.
+  // Skip the candidate probe entirely so we don't get fooled into picking a
+  // wrong port that happens to be running something else.
+  const servedByShim = !urlParams.get('kiwix') && (window.location.protocol === 'http:' || window.location.protocol === 'https:') && window.location.port;
+  if (servedByShim) {
+    KIWIX_PORT = window.location.port;
+    KIWIX = `${window.location.protocol}//${window.location.hostname}:${KIWIX_PORT}`;
+  }
+
   const kiwixCandidates = KIWIX_PORT ? [KIWIX_PORT] : ['8890', '8891', '8892', '8893', '18888', '8888'];
   const llmCandidates = LLM_PORT ? [LLM_PORT] : ['8081', '8082', '8083', '18081'];
 
@@ -921,8 +932,9 @@ async function autoDetectPorts() {
       const r = await fetch(`http://localhost:${p}/`, { signal: AbortSignal.timeout(1500) });
       if (!r.ok) continue;
       const body = await r.text();
-      // Shim's index page contains this exact string
-      if (body.includes('Apocalypse Kiwix Shim')) {
+      // Apocalypse shim recognition: either the new polished page (we serve
+      // ourselves there) or the old stub. Either confirms it's our shim.
+      if (body.includes('Apocalypse Kiwix Shim') || body.includes('OFFLINE KNOWLEDGE TERMINAL') || body.includes('APOCALYPSE OFFLINE KNOWLEDGE')) {
         KIWIX_PORT = p;
         break;
       }
@@ -933,8 +945,11 @@ async function autoDetectPorts() {
       }
     } catch (_) {}
   }
-  KIWIX_PORT = KIWIX_PORT || kiwixCandidates[0];
-  KIWIX = `http://localhost:${KIWIX_PORT}`;
+  // If we already locked KIWIX (servedByShim path), don't overwrite it.
+  if (!KIWIX) {
+    KIWIX_PORT = KIWIX_PORT || kiwixCandidates[0];
+    KIWIX = `http://localhost:${KIWIX_PORT}`;
+  }
 
   for (const p of llmCandidates) {
     if (await probePort(p, '/v1/models')) {
@@ -980,13 +995,22 @@ async function checkServices() {
 
   if (!LLM_ONLY) {
     try {
-      const r = await fetch(KIWIX + '/');
-      kiwixOk = r.ok || r.status === 302;
-      // Pull the loaded-ZIM count from the shim's index page
-      if (kiwixOk) {
-        const html = await r.text();
-        const m = html.match(/(\d+)\s+ZIMs?\s+loaded/i);
-        if (m) kiwixData = { zims: parseInt(m[1]) };
+      // Prefer the structured /api/status endpoint (returns installed_ids).
+      // Fall back to scraping the old stub's "N ZIMs loaded" string if status
+      // isn't available.
+      const sr = await fetch(KIWIX + '/api/status', { signal: AbortSignal.timeout(2000) });
+      if (sr.ok) {
+        const st = await sr.json();
+        kiwixOk = true;
+        kiwixData = { zims: (st.installed_ids || []).length };
+      } else {
+        const r = await fetch(KIWIX + '/');
+        kiwixOk = r.ok || r.status === 302;
+        if (kiwixOk) {
+          const html = await r.text();
+          const m = html.match(/(\d+)\s+ZIMs?\s+loaded/i);
+          if (m) kiwixData = { zims: parseInt(m[1]) };
+        }
       }
     } catch (e) {}
   }

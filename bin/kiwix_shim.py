@@ -358,7 +358,12 @@ def gather_candidates(question, max_candidates=6):
         cleaned = re.sub(r'[?!.,;:]', ' ', cleaned)
         cleaned = re.sub(r'\s+', ' ', cleaned).strip() or question
 
-        for book in wiki_books[:2]:  # only top 2 wiki books to keep it fast
+        # If no Wikipedia-family ZIMs are installed (small library, niche
+        # corpus, etc.), fall through to the other books rather than returning
+        # "no results" while a perfectly searchable ZIM sits idle.
+        search_books = wiki_books[:2] if wiki_books else other_books[:5]
+
+        for book in search_books:
             archive = ARCHIVES.get(book)
             if not archive:
                 continue
