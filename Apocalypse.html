@@ -996,7 +996,7 @@ async function autoDetectPorts() {
   }
 
   const kiwixCandidates = KIWIX_PORT ? [KIWIX_PORT] : ['8890', '8891', '8892', '8893', '18888', '8888'];
-  const llmCandidates = LLM_PORT ? [LLM_PORT] : ['8081', '8082', '8083', '18081'];
+  const llmCandidates = LLM_PORT ? [LLM_PORT] : ['8081', '8080', '8082', '8083', '18081'];
 
   // Prefer the Mac Python shim because it has the Wikipedia-first ranking.
   // Identify the shim by a unique string in its index page.

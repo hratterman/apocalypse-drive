@@ -161,8 +161,46 @@ def title_quality_score(path):
 # RAG pipeline helpers (LLM-driven question answering)
 # =====================================================================
 
-# Configurable via env vars (set by launcher) so we don't hardcode the URL
-LLAMAFILE_URL = os.environ.get('LLAMAFILE_URL', 'http://127.0.0.1:8081')
+# Configurable via env vars (set by launcher) so we don't hardcode the URL.
+# When LLAMAFILE_URL env var is unset, we auto-detect by probing common
+# llamafile/llama-server ports. This makes the app work whether the user
+# launched the LLM via the bundled LlamaServerManager (8081), manually
+# (typically 8080), or with a custom port.
+LLAMAFILE_URL = os.environ.get('LLAMAFILE_URL', '')  # populated by _detect_llm_url
+_LLM_PROBE_PORTS = ['8081', '8080', '8082', '8083', '18081']
+_LLM_URL_LAST_PROBE = 0  # timestamp; re-probe every 30s if cached URL fails
+
+
+def _detect_llm_url(force=False):
+    """Probe the candidate ports, return first one that responds to /v1/models.
+
+    Returns http://127.0.0.1:<port> or '' if none alive. Caches the result in
+    LLAMAFILE_URL until a request fails (caller invalidates by calling with
+    force=True after a connection error).
+    """
+    global LLAMAFILE_URL, _LLM_URL_LAST_PROBE
+    import urllib.request as _ur
+    now = time.time()
+    if LLAMAFILE_URL and not force and (now - _LLM_URL_LAST_PROBE) < 30:
+        return LLAMAFILE_URL
+    _LLM_URL_LAST_PROBE = now
+    # If env var was explicitly set, honor it without probing.
+    env_url = os.environ.get('LLAMAFILE_URL', '').strip()
+    if env_url:
+        LLAMAFILE_URL = env_url
+        return LLAMAFILE_URL
+    for port in _LLM_PROBE_PORTS:
+        url = f'http://127.0.0.1:{port}'
+        try:
+            req = _ur.Request(f'{url}/v1/models', headers={'Accept': 'application/json'})
+            with _ur.urlopen(req, timeout=1.5) as r:
+                if r.status == 200:
+                    LLAMAFILE_URL = url
+                    return LLAMAFILE_URL
+        except Exception:
+            continue
+    LLAMAFILE_URL = ''
+    return ''
 
 # Title prediction: ask the LLM what Wikipedia article(s) would answer the
 # question. The few-shot examples are critical. Without them the 3B model
@@ -188,6 +226,9 @@ Examples:
 def llm_complete(system, user, max_tokens=300, temperature=0.2, timeout=60):
     """Call the local llamafile chat endpoint, return the assistant text."""
     import urllib.request as _ur
+    url = _detect_llm_url()
+    if not url:
+        raise ConnectionError('No LLM detected on any candidate port')
     body = {
         'model': 'local',
         'messages': [
@@ -197,13 +238,27 @@ def llm_complete(system, user, max_tokens=300, temperature=0.2, timeout=60):
         'temperature': temperature,
         'max_tokens': max_tokens,
     }
-    req = _ur.Request(
-        f'{LLAMAFILE_URL}/v1/chat/completions',
-        data=json.dumps(body).encode(),
-        headers={'Content-Type': 'application/json'},
-    )
-    with _ur.urlopen(req, timeout=timeout) as r:
-        resp = json.loads(r.read())
+    try:
+        req = _ur.Request(
+            f'{url}/v1/chat/completions',
+            data=json.dumps(body).encode(),
+            headers={'Content-Type': 'application/json'},
+        )
+        with _ur.urlopen(req, timeout=timeout) as r:
+            resp = json.loads(r.read())
+    except (ConnectionError, OSError):
+        # Cached URL stale (LLM moved to a different port mid-session).
+        # Force re-probe and try once more.
+        url = _detect_llm_url(force=True)
+        if not url:
+            raise
+        req = _ur.Request(
+            f'{url}/v1/chat/completions',
+            data=json.dumps(body).encode(),
+            headers={'Content-Type': 'application/json'},
+        )
+        with _ur.urlopen(req, timeout=timeout) as r:
+            resp = json.loads(r.read())
     text = resp['choices'][0]['message']['content']
     # Strip llama 3.x EOT marker
     text = text.replace('<|eot_id|>', '').strip()

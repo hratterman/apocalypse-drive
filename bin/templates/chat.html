@@ -260,7 +260,7 @@
     const chatWarn = document.getElementById('chatWarn');
 
     // Auto-detect LLM endpoint. Try common llamafile/llama-server ports.
-    const LLM_CANDIDATES = ['8081', '8082', '8083', '18081'];
+    const LLM_CANDIDATES = ['8081', '8080', '8082', '8083', '18081'];
     let LLM = null;
     let MODEL_NAME = 'local';
 
@@ -333,7 +333,7 @@
       if (!LLM) {
         const ok = await detectLLM();
         if (!ok) {
-          append('error', 'No LLM detected on ports 8081-8083 or 18081. Run the local model and try again.');
+          append('error', 'No LLM detected on ports 8080-8083 or 18081. Run the local model and try again.');
           return;
         }
       }
