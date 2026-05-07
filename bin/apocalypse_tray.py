@@ -28,8 +28,10 @@ Layout (relative to install_dir):
     logs/
       shim.log
 """
+import atexit
 import json
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -192,16 +194,61 @@ class ShimManager:
 
         kwargs = {'stdout': log_fp, 'stderr': subprocess.STDOUT, 'cwd': str(self.install_dir)}
         if sys.platform == 'win32':
-            kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+            # Group on Windows so we can taskkill the whole tree.
+            kwargs['creationflags'] = (
+                subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP
+            )
+        else:
+            # Put the child in its own process group on POSIX so we can
+            # signal the whole tree at once (and so the child doesn't share
+            # our controlling terminal).
+            kwargs['start_new_session'] = True
         self.process = subprocess.Popen(cmd, **kwargs)
 
     def stop(self):
-        if self.process and self.process.poll() is None:
-            self.process.terminate()
+        proc = self.process
+        if not proc or proc.poll() is not None:
+            self.process = None
+            return
+        try:
+            if sys.platform == 'win32':
+                # Send Ctrl+Break to the process group, then taskkill /T /F as
+                # a hammer fallback.
+                try:
+                    proc.send_signal(signal.CTRL_BREAK_EVENT)
+                except Exception:
+                    pass
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    subprocess.call(
+                        ['taskkill', '/F', '/T', '/PID', str(proc.pid)],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+            else:
+                # SIGTERM the entire process group, then SIGKILL if needed.
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                except (ProcessLookupError, PermissionError):
+                    proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except (ProcessLookupError, PermissionError):
+                        proc.kill()
+                    try:
+                        proc.wait(timeout=2)
+                    except subprocess.TimeoutExpired:
+                        pass
+        except Exception:
+            # Last resort: don't let stop() raise during atexit.
             try:
-                self.process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self.process.kill()
+                proc.kill()
+            except Exception:
+                pass
         self.process = None
 
     def restart(self):
@@ -241,6 +288,25 @@ class ApocalypseApp:
         self.shim = ShimManager(self.install_dir, self.code_dir, port=port)
         self.icon = None
         self.last_health = None
+
+        # Belt-and-suspenders cleanup: no matter how this process dies (menu
+        # Quit, Force Quit, parent crash, SIGTERM from launchd), the child
+        # shim must die too. Without this, the child holds files in the .app
+        # bundle and Finder refuses to trash the app.
+        atexit.register(self.shim.stop)
+        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            try:
+                signal.signal(sig, self._signal_exit)
+            except (ValueError, OSError, AttributeError):
+                # Some signals aren't available on Windows / non-main threads.
+                pass
+
+    def _signal_exit(self, signum, frame):
+        try:
+            self.shim.stop()
+        finally:
+            # Re-raise default behavior so the process actually exits.
+            sys.exit(0)
 
     def url(self, path=''):
         return f'http://127.0.0.1:{self.shim.port}{path}'

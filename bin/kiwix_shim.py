@@ -1116,11 +1116,35 @@ def main():
     else:
         print(f"Serving {len(ARCHIVES)} books on http://{args.host}:{args.port}/")
     srv = ThreadingHTTPServer((args.host, args.port), Handler)
+
+    # Graceful shutdown on SIGTERM / SIGINT / SIGHUP. The parent tray process
+    # signals us when the user quits the .app or Force Quits the parent;
+    # without this handler the child would survive as an orphan and hold
+    # files in the .app bundle, blocking Finder from trashing the app.
+    import signal as _signal
+
+    def _shutdown(signum, frame):
+        try:
+            print(f"\n[shim] received signal {signum}, shutting down")
+            srv.shutdown()
+        except Exception:
+            pass
+
+    for _sig in (_signal.SIGTERM, _signal.SIGINT, _signal.SIGHUP):
+        try:
+            _signal.signal(_sig, _shutdown)
+        except (ValueError, OSError, AttributeError):
+            pass
+
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
         print("\nStopping.")
-        srv.server_close()
+    finally:
+        try:
+            srv.server_close()
+        except Exception:
+            pass
 
 
 if __name__ == '__main__':
