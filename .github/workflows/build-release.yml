@@ -92,6 +92,12 @@ jobs:
           codesign --verify --verbose=2 dist/Apocalypse.app
           spctl --assess --verbose=2 --type execute dist/Apocalypse.app || true
 
+      - name: Strip quarantine from .app before packaging
+        run: |
+          # Remove quarantine xattr so the app works on exFAT drives
+          # where users can't run xattr themselves (exFAT doesn't support xattrs)
+          xattr -dr com.apple.quarantine dist/Apocalypse.app || true
+
       - name: Install create-dmg
         run: brew install create-dmg
 
