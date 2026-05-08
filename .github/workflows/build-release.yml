@@ -125,7 +125,7 @@ jobs:
             --password "$NOTARIZATION_PASSWORD" \
             --team-id "$NOTARIZATION_TEAM_ID" \
             --wait \
-            --timeout 600
+            --timeout 1800
 
           # Staple the notarization ticket to the DMG so it works offline
           xcrun stapler staple release/Apocalypse-macOS.dmg
