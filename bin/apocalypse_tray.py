@@ -14,7 +14,7 @@ Dependencies:
   All platforms:   Pillow               (icon rendering)
 
 Why two libraries: pystray's macOS backend is unreliable inside a PyInstaller
-.app — Icon.run() enters NSRunLoop and silently hangs with no logs and no UI.
+.app Icon.run() enters NSRunLoop and silently hangs with no logs and no UI.
 rumps is the standard macOS-native menu-bar library used by countless shipped
 .app bundles, and its rumps.quit_application() actually exits the process.
 
@@ -78,7 +78,7 @@ else:
 # Critical detail: when the parent tray spawns its shim subprocess via
 # sys.executable inside a PyInstaller bundle, the child re-runs THIS module
 # with --run-shim. If both processes share one log file, the child's
-# write_text() at startup wipes the parent's lines — including any FATAL
+# write_text() at startup wipes the parent's lines including any FATAL
 # traceback. So the child writes to a separate file.
 _IS_SHIM_CHILD = len(sys.argv) > 1 and sys.argv[1] == '--run-shim'
 if _IS_SHIM_CHILD:
@@ -117,21 +117,32 @@ def find_install_dir():
     """
     # 0. Pointer file written by the wizard's drive picker. This is THE way
     # users tell us "put my data on the external drive" without env vars.
+    #
+    # CRITICAL: do NOT call .resolve() or .mkdir() here. Both stat() the SD
+    # card, and an idle/asleep USB drive at boot will silently throw OSError
+    # and fall through to the broken candidate search. We trust the pointer
+    # absolutely. If the drive is genuinely missing, downstream code (find_model,
+    # state.json read) will handle it gracefully and the self-heal loop will
+    # recover when the drive wakes up.
     pointer = Path.home() / '.apocalypse_install'
-    if pointer.exists():
-        try:
+    try:
+        if pointer.exists():
             target = pointer.read_text(encoding='utf-8').strip()
             if target:
-                p = Path(target).expanduser().resolve()
-                # Be tolerant: if the drive isn't mounted, fall through to
-                # the rest of the search instead of crashing.
+                p = Path(target).expanduser()
+                _llog(f"find_install_dir: using pointer file -> {p}")
+                # Best-effort mkdir but DO NOT block on it. If the SD is
+                # asleep, the parent dir already exists from the wizard's
+                # earlier write of state.json. mkdir failure is informational.
                 try:
                     p.mkdir(parents=True, exist_ok=True)
-                    return p
-                except (OSError, PermissionError):
-                    pass
-        except Exception:
-            pass
+                except (OSError, PermissionError) as e:
+                    _llog(f"find_install_dir: pointer mkdir non-fatal: {e}")
+                return p
+        else:
+            _llog("find_install_dir: no pointer file present")
+    except Exception as e:
+        _llog(f"find_install_dir: pointer read failed: {e}")
 
     env = os.environ.get('APOCALYPSE_DIR')
     if env:
@@ -423,19 +434,28 @@ class LlamaServerManager:
         Called each find_model() so the tray follows the wizard's drive picker
         without requiring a restart. Without this, the tray keeps looking at
         the boot-time install_dir even after the wizard relocated to a USB.
+
+        CRITICAL: do NOT call .resolve() on the pointer target. Same reason
+        as find_install_dir() resolve() stat()s the SD card and a sleeping
+        USB drive will silently throw OSError. Compare paths as strings.
         """
         pointer = Path.home() / '.apocalypse_install'
         if not pointer.exists():
             return
         try:
-            target = Path(pointer.read_text(encoding='utf-8').strip()).resolve()
+            target_str = pointer.read_text(encoding='utf-8').strip()
         except Exception:
             return
-        if target == self.install_dir.resolve():
+        if not target_str:
+            return
+        target = Path(target_str).expanduser()
+        # Compare without resolve() to avoid waking the SD card unnecessarily.
+        if str(target) == str(self.install_dir):
             return
         # Pointer changed since boot, re-target.
-        if not target.exists():
-            return  # drive not mounted; keep current
+        # Don't gate on target.exists() that's also a stat() that wedges.
+        # If the dir is genuinely gone, find_model() will return None below
+        # and we just keep retrying every tick. No harm.
         self.install_dir = target
         self.llm_dir = target / 'llm'
         # NB: do NOT rewire log_path. Keeps the existing log continuous.
@@ -839,7 +859,7 @@ if _USE_RUMPS:
             # icon ever fails to render (Cocoa silently drops bad NSImage),
             # the title text guarantees the menu-bar slot is visible. Without
             # this, the user sees NOTHING in the menu bar and assumes the app
-            # didn't launch — which is exactly what happened on Henry's
+            # didn't launch which is exactly what happened on Henry's
             # MacBook with v1.3.3.
             super().__init__(
                 'Apocalypse',
@@ -898,7 +918,7 @@ if _USE_RUMPS:
                 health = self.core.shim.health()
                 # Map each health state to (color, glyph). The glyph stays
                 # visible even if the icon image fails to render (rumps'
-                # NSImage falls back to empty when the path is bad — see
+                # NSImage falls back to empty when the path is bad see
                 # icon-validation in __init__).
                 state_map = {
                     'down':         ('red',    '✕'),
@@ -922,7 +942,7 @@ if _USE_RUMPS:
                     if not self.core.shim.setup_complete():
                         webbrowser.open(self.core.url('/setup'))
                     else:
-                        # Already set up — open main page so user lands somewhere useful
+                        # Already set up open main page so user lands somewhere useful
                         webbrowser.open(self.core.url('/'))
 
                 # Self-heal SHIM: if the shim subprocess died (port 8888 dead),
