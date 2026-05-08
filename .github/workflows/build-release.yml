@@ -53,24 +53,29 @@ jobs:
           echo "$CERTIFICATES_P12" | base64 --decode > /tmp/cert.p12
 
           # Create a temporary keychain so we don't touch the login keychain
-          KEYCHAIN_PATH=/tmp/build.keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
           KEYCHAIN_PASSWORD=ci-temp-password
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          # Import the cert
+          # Import the cert into the temp keychain
           security import /tmp/cert.p12 \
             -k "$KEYCHAIN_PATH" \
             -P "$CERTIFICATES_P12_PASSWORD" \
             -T /usr/bin/codesign \
             -T /usr/bin/security
-          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
+
+          # Add temp keychain to the search list (keep existing keychains too)
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychain -d user | tr -d '"' | xargs)
 
           # Allow codesign to use the key without a UI prompt
           security set-key-partition-list \
-            -S apple-tool:,apple: \
+            -S apple-tool:,apple:,codesign: \
             -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Confirm the identity is visible
+          security find-identity -v -p codesigning "$KEYCHAIN_PATH"
 
           rm /tmp/cert.p12
 
