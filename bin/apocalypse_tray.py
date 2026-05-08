@@ -47,7 +47,7 @@ import webbrowser
 from pathlib import Path
 
 try:
-    from PIL import Image, ImageDraw
+    from PIL import Image, ImageDraw, ImageFont
 except ImportError:
     print("ERROR: Pillow required. Install with: pip install Pillow", file=sys.stderr)
     sys.exit(1)
@@ -620,21 +620,70 @@ class LlamaServerManager:
 # ---- Tray icon -------------------------------------------------------------
 
 def make_icon(color='gray'):
-    """Generate a 64x64 icon with a colored dot."""
-    img = Image.new('RGBA', (64, 64), (0, 0, 0, 0))
+    """Generate a 64x64 menu bar icon: ASCII block 'A' colored by status.
+
+    Transparent background so the macOS menu bar shows through. Color
+    encodes service health (green=ok, yellow=downloading, red=down,
+    gray=starting). Same block-glyph as the app icon and the homepage
+    banner so the brand stays consistent across surfaces.
+    """
+    size = 64
+    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    # Outer ring
-    d.ellipse((8, 8, 56, 56), outline=(180, 180, 180, 255), width=2)
-    # Inner dot
+
     colors = {
-        'gray':       (140, 140, 140, 255),
-        'green':      (74, 222, 128, 255),
-        'yellow':     (251, 191, 36, 255),
-        'red':        (248, 113, 113, 255),
-        'orange':     (255, 169, 64, 255),
+        'gray':   (140, 140, 140, 255),
+        'green':  (74, 222, 128, 255),
+        'yellow': (251, 191, 36, 255),
+        'red':    (248, 113, 113, 255),
+        'orange': (255, 169, 64, 255),
     }
-    fill = colors.get(color, colors['gray'])
-    d.ellipse((20, 20, 44, 44), fill=fill)
+    fg = colors.get(color, colors['gray'])
+
+    # Same block-A as bin/make_icons.py, kept inline so the tray module
+    # has no import dependency on it.
+    glyph = [
+        "   █████╗   ",
+        "  ██╔══██╗  ",
+        "  ███████║  ",
+        "  ██╔══██║  ",
+        "  ██║  ██║  ",
+        "  ╚═╝  ╚═╝  ",
+    ]
+
+    candidates = [
+        "/System/Library/Fonts/Menlo.ttc",
+        "/System/Library/Fonts/SFNSMono.ttf",
+        "/Library/Fonts/Menlo.ttc",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSansMono-Bold.ttf",
+        "C:\\Windows\\Fonts\\consola.ttf",
+        "C:\\Windows\\Fonts\\lucon.ttf",
+    ]
+    font_path = next((p for p in candidates if os.path.exists(p)), None)
+
+    rows = len(glyph)
+    block = "\n".join(glyph)
+
+    target_h = int(size * 0.78)
+    font_size = max(6, int(target_h / rows))
+
+    if font_path:
+        font = ImageFont.truetype(font_path, font_size)
+    else:
+        font = ImageFont.load_default()
+
+    bbox = d.multiline_textbbox((0, 0), block, font=font, spacing=0)
+    bw, bh = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    if bw > size * 0.92 and font_path:
+        font_size = max(6, int(font_size * (size * 0.92) / bw))
+        font = ImageFont.truetype(font_path, font_size)
+        bbox = d.multiline_textbbox((0, 0), block, font=font, spacing=0)
+        bw, bh = bbox[2] - bbox[0], bbox[3] - bbox[1]
+
+    x = (size - bw) // 2 - bbox[0]
+    y = (size - bh) // 2 - bbox[1]
+    d.multiline_text((x, y), block, font=font, fill=fg, spacing=0)
     return img
 
 
