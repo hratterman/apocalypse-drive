@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Games · Apocalypse</title>
+<link rel="stylesheet" href="/static/themes.css">
+<script src="/static/apply-theme.js"></script>
+<style>
+  .games-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 20px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--border-radius); padding: 16px; text-decoration: none; color: var(--text); transition: background 0.15s, border-color 0.15s; display: block; }
+  .card:hover { background: var(--bg-glow); border-color: var(--text-dim); color: var(--text-bright); }
+  .card-icon { font-size: 32px; margin-bottom: 8px; }
+  .card-title { font-weight: bold; color: var(--text-bright); margin-bottom: 4px; font-size: 15px; text-transform: var(--button-text-transform); letter-spacing: var(--button-letter-spacing); }
+  .card-desc { color: var(--text-dim); font-size: 12px; line-height: 1.4; }
+  [data-theme="geocities"] .card { border: 4px ridge #ffffff !important; background: #c0c0c0 !important; color: #000080 !important; }
+  [data-theme="geocities"] .card:hover { background: #ffff00 !important; }
+  [data-theme="geocities"] .card-title { color: #ff0000 !important; font-family: 'Times New Roman', serif !important; }
+  [data-theme="geocities"] .card-desc { color: #000080 !important; }
+  .blurb { color: var(--text-dim); margin-top: 8px; font-size: 13px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="frame-header">
+    <h1>Games</h1>
+    <a class="frame-back" href="/">← home</a>
+  </div>
+  <p class="blurb">When the network is down and the books are heavy, you still need something to do with your hands. Eight games. All offline. All free.</p>
+  <div class="games-grid">
+    <a class="card" href="/games/2048.html">
+      <div class="card-icon">⊞</div>
+      <div class="card-title">2048</div>
+      <div class="card-desc">Slide tiles, merge matching numbers, reach 2048.</div>
+    </a>
+    <a class="card" href="/games/snake.html">
+      <div class="card-icon">∽</div>
+      <div class="card-title">Snake</div>
+      <div class="card-desc">Eat, grow, don't bite yourself.</div>
+    </a>
+    <a class="card" href="/games/tetris.html">
+      <div class="card-icon">▦</div>
+      <div class="card-title">Tetris</div>
+      <div class="card-desc">Falling blocks. Clear lines. Get faster.</div>
+    </a>
+    <a class="card" href="/games/breakout.html">
+      <div class="card-icon">▬</div>
+      <div class="card-title">Breakout</div>
+      <div class="card-desc">Paddle, ball, bricks. The arcade classic.</div>
+    </a>
+    <a class="card" href="/games/minesweeper.html">
+      <div class="card-icon">✱</div>
+      <div class="card-title">Minesweeper</div>
+      <div class="card-desc">Logic puzzle. Don't click the bombs.</div>
+    </a>
+    <a class="card" href="/games/wordle.html">
+      <div class="card-icon">A·B·C</div>
+      <div class="card-title">Wordle</div>
+      <div class="card-desc">Guess the five-letter word. Six tries. New word daily.</div>
+    </a>
+    <a class="card" href="/games/solitaire.html">
+      <div class="card-icon">♠♥♦♣</div>
+      <div class="card-title">Solitaire</div>
+      <div class="card-desc">Klondike. The original time-waster.</div>
+    </a>
+    <a class="card" href="/games/chess.html">
+      <div class="card-icon">♞</div>
+      <div class="card-title">Chess</div>
+      <div class="card-desc">You vs an AI that thinks two moves ahead.</div>
+    </a>
+    <a class="card" href="/games/memory.html">
+      <div class="card-icon">⟁</div>
+      <div class="card-title">Memory</div>
+      <div class="card-desc">Match pairs. Lower moves wins.</div>
+    </a>
+    <a class="card" href="/games/hangman.html">
+      <div class="card-icon">⌐</div>
+      <div class="card-title">Hangman</div>
+      <div class="card-desc">Six wrong guesses, you swing. Apocalypse-themed words.</div>
+    </a>
+  </div>
+</div>
+</body>
+</html>

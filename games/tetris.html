@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tetris · Apocalypse</title>
+<link rel="stylesheet" href="/static/themes.css">
+<script src="/static/apply-theme.js"></script>
+<style>
+  .stage { display: flex; gap: 24px; justify-content: center; }
+  .meta { display: flex; flex-direction: column; gap: 12px; min-width: 120px; }
+  .pill { background: var(--bg-glow); border: 1px solid var(--border); border-radius: var(--border-radius); padding: 8px 14px; }
+  .pill .lbl { color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+  .pill .val { color: var(--text-bright); font-size: 22px; font-weight: bold; }
+  canvas { background: var(--bg-glow); border: 1px solid var(--border); border-radius: var(--border-radius); display: block; }
+  .actions { text-align: center; margin-top: 14px; }
+  .help { color: var(--text-dim); margin-top: 14px; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="frame-header">
+    <h1>Tetris</h1>
+    <a class="frame-back" href="/games">← all games</a>
+  </div>
+  <div class="stage">
+    <canvas id="c" width="200" height="400"></canvas>
+    <div class="meta">
+      <div class="pill"><div class="lbl">Score</div><div class="val" id="score">0</div></div>
+      <div class="pill"><div class="lbl">Lines</div><div class="val" id="lines">0</div></div>
+      <div class="pill"><div class="lbl">High</div><div class="val" id="high">0</div></div>
+    </div>
+  </div>
+  <div class="actions"><button id="start">Start</button></div>
+  <div class="help">←/→ move · ↑ rotate · ↓ soft drop · space hard drop</div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const COLS = 10, ROWS = 20, SIZE = 20;
+const PIECES = {
+  I: {color:'--text-bright', shape:[[1,1,1,1]]},
+  O: {color:'--ok',          shape:[[1,1],[1,1]]},
+  T: {color:'--warn',         shape:[[0,1,0],[1,1,1]]},
+  L: {color:'--text-dim',     shape:[[1,0],[1,0],[1,1]]},
+  J: {color:'--text-dim',     shape:[[0,1],[0,1],[1,1]]},
+  S: {color:'--ok',           shape:[[0,1,1],[1,1,0]]},
+  Z: {color:'--warn',         shape:[[1,1,0],[0,1,1]]},
+};
+const KEYS = Object.keys(PIECES);
+
+let board, cur, x, y, score, lines, alive, timer, dropMs;
+let high = parseInt(localStorage.getItem('tetris-high') || '0');
+document.getElementById('high').textContent = high;
+
+function getColor(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function newPiece() { const k = KEYS[Math.floor(Math.random() * KEYS.length)]; return {key:k, color:PIECES[k].color, shape:PIECES[k].shape.map(r => r.slice())}; }
+
+function reset() {
+  board = Array.from({length: ROWS}, () => Array(COLS).fill(null));
+  cur = newPiece();
+  x = Math.floor((COLS - cur.shape[0].length) / 2); y = 0;
+  score = 0; lines = 0; alive = true; dropMs = 600;
+  document.getElementById('score').textContent = 0;
+  document.getElementById('lines').textContent = 0;
+  draw();
+}
+
+function collide(nx, ny, sh) {
+  for (let r = 0; r < sh.length; r++) for (let c = 0; c < sh[r].length; c++) {
+    if (!sh[r][c]) continue;
+    const px = nx + c, py = ny + r;
+    if (px < 0 || px >= COLS || py >= ROWS) return true;
+    if (py >= 0 && board[py][px]) return true;
+  }
+  return false;
+}
+
+function merge() {
+  for (let r = 0; r < cur.shape.length; r++) for (let c = 0; c < cur.shape[r].length; c++) {
+    if (cur.shape[r][c]) {
+      const py = y + r;
+      if (py < 0) { alive = false; return; }
+      board[py][x + c] = cur.color;
+    }
+  }
+  let cleared = 0;
+  for (let r = ROWS - 1; r >= 0; r--) {
+    if (board[r].every(cell => cell)) {
+      board.splice(r, 1); board.unshift(Array(COLS).fill(null));
+      cleared++; r++;
+    }
+  }
+  if (cleared) {
+    lines += cleared;
+    score += [0, 100, 300, 500, 800][cleared];
+    document.getElementById('score').textContent = score;
+    document.getElementById('lines').textContent = lines;
+    if (score > high) { high = score; document.getElementById('high').textContent = high; localStorage.setItem('tetris-high', high); }
+    dropMs = Math.max(120, 600 - lines * 8);
+    if (timer) { clearInterval(timer); timer = setInterval(tick, dropMs); }
+  }
+  cur = newPiece();
+  x = Math.floor((COLS - cur.shape[0].length) / 2); y = 0;
+  if (collide(x, y, cur.shape)) alive = false;
+}
+
+function rotate(sh) {
+  const out = [];
+  for (let c = 0; c < sh[0].length; c++) {
+    const row = []; for (let r = sh.length - 1; r >= 0; r--) row.push(sh[r][c]);
+    out.push(row);
+  }
+  return out;
+}
+
+function tick() {
+  if (!alive) return;
+  if (!collide(x, y + 1, cur.shape)) y++;
+  else { merge(); }
+  draw();
+  if (!alive) {
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, 200, 400);
+    ctx.fillStyle = getColor('--text-bright');
+    ctx.font = 'bold 22px ' + getColor('--font-stack');
+    ctx.textAlign = 'center';
+    ctx.fillText('GAME OVER', 100, 200);
+    clearInterval(timer); timer = null;
+  }
+}
+
+function draw() {
+  ctx.fillStyle = getColor('--bg-glow');
+  ctx.fillRect(0, 0, 200, 400);
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    if (board[r][c]) drawCell(c, r, board[r][c]);
+  }
+  for (let r = 0; r < cur.shape.length; r++) for (let c = 0; c < cur.shape[r].length; c++) {
+    if (cur.shape[r][c]) drawCell(x + c, y + r, cur.color);
+  }
+}
+
+function drawCell(c, r, colorVar) {
+  const px = c * SIZE, py = r * SIZE;
+  ctx.fillStyle = getColor(colorVar);
+  ctx.fillRect(px + 1, py + 1, SIZE - 2, SIZE - 2);
+}
+
+document.addEventListener('keydown', e => {
+  if (!alive) return;
+  if (e.key === 'ArrowLeft') { if (!collide(x - 1, y, cur.shape)) { x--; draw(); } e.preventDefault(); }
+  else if (e.key === 'ArrowRight') { if (!collide(x + 1, y, cur.shape)) { x++; draw(); } e.preventDefault(); }
+  else if (e.key === 'ArrowDown') { if (!collide(x, y + 1, cur.shape)) { y++; draw(); } e.preventDefault(); }
+  else if (e.key === 'ArrowUp') {
+    const rot = rotate(cur.shape);
+    if (!collide(x, y, rot)) { cur.shape = rot; draw(); }
+    e.preventDefault();
+  } else if (e.key === ' ') {
+    while (!collide(x, y + 1, cur.shape)) y++;
+    tick(); e.preventDefault();
+  }
+});
+
+document.getElementById('start').onclick = () => {
+  if (timer) clearInterval(timer);
+  reset();
+  timer = setInterval(tick, dropMs);
+};
+
+reset();
+</script>
+</body>
+</html>

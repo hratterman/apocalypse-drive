@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Minesweeper · Apocalypse</title>
+<link rel="stylesheet" href="/static/themes.css">
+<script src="/static/apply-theme.js"></script>
+<style>
+  .meta { display: flex; gap: 12px; margin-bottom: 16px; align-items: center; }
+  .pill { background: var(--bg-glow); border: 1px solid var(--border); border-radius: var(--border-radius); padding: 6px 14px; }
+  .pill .lbl { color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+  .pill .val { color: var(--text-bright); font-size: 18px; font-weight: bold; font-family: var(--font-stack); }
+  .board { display: inline-grid; gap: 1px; background: var(--border); border: 1px solid var(--border); padding: 1px; user-select: none; }
+  .cell { width: 26px; height: 26px; background: var(--panel); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; cursor: pointer; }
+  .cell.open { background: var(--bg-glow); cursor: default; }
+  .cell.mine { background: var(--warn); color: var(--bg); }
+  .cell.flag { color: var(--warn); }
+  .n1 { color: #5b8def; } .n2 { color: var(--ok); } .n3 { color: var(--warn); }
+  .n4 { color: var(--text-dim); } .n5 { color: var(--warn); } .n6 { color: var(--ok); }
+  .n7 { color: var(--text); } .n8 { color: var(--text-dim); }
+  [data-theme="paper"] .n1, [data-theme="solarized"] .n1 { color: #1f4ea0; }
+  [data-theme="terminal"] .n1, [data-theme="forest"] .n1, [data-theme="geocities"] .n1 { color: #6db4ff; }
+  .center { text-align: center; }
+  .help { color: var(--text-dim); margin-top: 14px; font-size: 12px; text-align: center; }
+  .actions { display: flex; gap: 8px; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="frame-header">
+    <h1>Minesweeper</h1>
+    <a class="frame-back" href="/games">← all games</a>
+  </div>
+  <div class="meta">
+    <div class="pill"><div class="lbl">Mines</div><div class="val" id="minesLeft">10</div></div>
+    <div class="pill"><div class="lbl">Time</div><div class="val" id="time">0</div></div>
+    <div class="actions">
+      <button data-diff="9,10">Easy</button>
+      <button data-diff="16,40">Medium</button>
+      <button data-diff="20,80">Hard</button>
+    </div>
+  </div>
+  <div class="center"><div class="board" id="board"></div></div>
+  <div class="help">Click to reveal. Right-click (or long-press) to flag.</div>
+</div>
+
+<script>
+let SZ = 9, MINES = 10;
+let grid, opened, flagged, alive, won, startTs, timerId;
+const boardEl = document.getElementById('board');
+const minesLeftEl = document.getElementById('minesLeft');
+const timeEl = document.getElementById('time');
+
+function reset(sz, m) {
+  SZ = sz; MINES = m;
+  grid = Array.from({length: SZ}, () => Array(SZ).fill(0));
+  opened = Array.from({length: SZ}, () => Array(SZ).fill(false));
+  flagged = Array.from({length: SZ}, () => Array(SZ).fill(false));
+  alive = true; won = false; startTs = null;
+  if (timerId) clearInterval(timerId);
+  timeEl.textContent = '0';
+
+  let placed = 0;
+  while (placed < MINES) {
+    const r = Math.floor(Math.random() * SZ), c = Math.floor(Math.random() * SZ);
+    if (grid[r][c] === -1) continue;
+    grid[r][c] = -1; placed++;
+  }
+  for (let r = 0; r < SZ; r++) for (let c = 0; c < SZ; c++) {
+    if (grid[r][c] === -1) continue;
+    let n = 0;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < SZ && nc >= 0 && nc < SZ && grid[nr][nc] === -1) n++;
+    }
+    grid[r][c] = n;
+  }
+  render();
+  minesLeftEl.textContent = MINES;
+}
+
+function render() {
+  boardEl.style.gridTemplateColumns = `repeat(${SZ}, 26px)`;
+  boardEl.innerHTML = '';
+  for (let r = 0; r < SZ; r++) for (let c = 0; c < SZ; c++) {
+    const d = document.createElement('div');
+    d.className = 'cell';
+    if (opened[r][c]) {
+      d.classList.add('open');
+      if (grid[r][c] === -1) { d.classList.add('mine'); d.textContent = '✱'; }
+      else if (grid[r][c] > 0) { d.classList.add('n' + grid[r][c]); d.textContent = grid[r][c]; }
+    } else if (flagged[r][c]) {
+      d.classList.add('flag'); d.textContent = '⚑';
+    }
+    d.addEventListener('click', () => reveal(r, c));
+    d.addEventListener('contextmenu', e => { e.preventDefault(); flag(r, c); });
+    let pressTimer;
+    d.addEventListener('touchstart', e => {
+      pressTimer = setTimeout(() => { flag(r, c); pressTimer = null; }, 400);
+    });
+    d.addEventListener('touchend', () => { if (pressTimer) clearTimeout(pressTimer); });
+    boardEl.appendChild(d);
+  }
+}
+
+function startTimer() {
+  if (startTs) return;
+  startTs = Date.now();
+  timerId = setInterval(() => {
+    timeEl.textContent = Math.floor((Date.now() - startTs) / 1000);
+  }, 1000);
+}
+
+function reveal(r, c) {
+  if (!alive || won || opened[r][c] || flagged[r][c]) return;
+  startTimer();
+  opened[r][c] = true;
+  if (grid[r][c] === -1) {
+    alive = false;
+    for (let i = 0; i < SZ; i++) for (let j = 0; j < SZ; j++) if (grid[i][j] === -1) opened[i][j] = true;
+    clearInterval(timerId);
+    render();
+    setTimeout(() => alert('Boom. Try again.'), 50);
+    return;
+  }
+  if (grid[r][c] === 0) {
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < SZ && nc >= 0 && nc < SZ) reveal(nr, nc);
+    }
+  }
+  checkWin();
+  render();
+}
+
+function flag(r, c) {
+  if (!alive || won || opened[r][c]) return;
+  flagged[r][c] = !flagged[r][c];
+  let count = 0;
+  for (let i = 0; i < SZ; i++) for (let j = 0; j < SZ; j++) if (flagged[i][j]) count++;
+  minesLeftEl.textContent = MINES - count;
+  render();
+}
+
+function checkWin() {
+  let unopened = 0;
+  for (let r = 0; r < SZ; r++) for (let c = 0; c < SZ; c++)
+    if (!opened[r][c]) unopened++;
+  if (unopened === MINES) {
+    won = true;
+    clearInterval(timerId);
+    setTimeout(() => alert('You win! Time: ' + timeEl.textContent + 's'), 50);
+  }
+}
+
+document.querySelectorAll('button[data-diff]').forEach(b => {
+  b.onclick = () => {
+    const [s, m] = b.dataset.diff.split(',').map(Number);
+    reset(s, m);
+  };
+});
+
+reset(9, 10);
+</script>
+</body>
+</html>

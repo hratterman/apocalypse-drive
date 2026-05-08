@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Snake · Apocalypse</title>
+<link rel="stylesheet" href="/static/themes.css">
+<script src="/static/apply-theme.js"></script>
+<style>
+  .meta { display: flex; gap: 12px; margin-bottom: 16px; }
+  .pill { background: var(--bg-glow); border: 1px solid var(--border); border-radius: var(--border-radius); padding: 6px 14px; font-size: 12px; }
+  .pill .lbl { color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+  .pill .val { color: var(--text-bright); font-size: 18px; font-weight: bold; }
+  canvas { background: var(--bg-glow); border: 1px solid var(--border); border-radius: var(--border-radius); display: block; margin: 0 auto; }
+  .actions { text-align: center; margin-top: 14px; }
+  .help { color: var(--text-dim); margin-top: 14px; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="frame-header">
+    <h1>Snake</h1>
+    <a class="frame-back" href="/games">← all games</a>
+  </div>
+
+  <div class="meta">
+    <div class="pill"><div class="lbl">Score</div><div class="val" id="score">0</div></div>
+    <div class="pill"><div class="lbl">High</div><div class="val" id="high">0</div></div>
+  </div>
+
+  <canvas id="c" width="400" height="400"></canvas>
+  <div class="actions"><button id="start">Start</button></div>
+  <div class="help">Arrow keys to steer. Don't bite yourself.</div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const SIZE = 20, COLS = 20, ROWS = 20;
+let snake, dir, food, score, alive, timer;
+const scoreEl = document.getElementById('score');
+const highEl = document.getElementById('high');
+let high = parseInt(localStorage.getItem('snake-high') || '0');
+highEl.textContent = high;
+
+function getColor(v) {
+  return getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+}
+
+function reset() {
+  snake = [{x:10, y:10}, {x:9, y:10}, {x:8, y:10}];
+  dir = {x:1, y:0};
+  food = newFood();
+  score = 0;
+  alive = true;
+  scoreEl.textContent = 0;
+  draw();
+}
+
+function newFood() {
+  while (true) {
+    const f = {x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS)};
+    if (!snake.some(s => s.x === f.x && s.y === f.y)) return f;
+  }
+}
+
+function tick() {
+  if (!alive) return;
+  const head = {x: snake[0].x + dir.x, y: snake[0].y + dir.y};
+  if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS ||
+      snake.some(s => s.x === head.x && s.y === head.y)) {
+    alive = false;
+    if (score > high) { high = score; highEl.textContent = high; localStorage.setItem('snake-high', high); }
+    ctx.fillStyle = getColor('--text-bright');
+    ctx.font = 'bold 28px ' + getColor('--font-stack');
+    ctx.textAlign = 'center';
+    ctx.fillText('GAME OVER', 200, 200);
+    ctx.font = '14px ' + getColor('--font-stack');
+    ctx.fillStyle = getColor('--text-dim');
+    ctx.fillText('press start to play again', 200, 230);
+    return;
+  }
+  snake.unshift(head);
+  if (head.x === food.x && head.y === food.y) {
+    score++;
+    scoreEl.textContent = score;
+    food = newFood();
+  } else {
+    snake.pop();
+  }
+  draw();
+}
+
+function draw() {
+  ctx.fillStyle = getColor('--bg-glow');
+  ctx.fillRect(0, 0, 400, 400);
+  ctx.fillStyle = getColor('--warn');
+  ctx.fillRect(food.x * SIZE + 1, food.y * SIZE + 1, SIZE - 2, SIZE - 2);
+  ctx.fillStyle = getColor('--ok');
+  snake.forEach((s, i) => {
+    ctx.fillStyle = i === 0 ? getColor('--text-bright') : getColor('--ok');
+    ctx.fillRect(s.x * SIZE + 1, s.y * SIZE + 1, SIZE - 2, SIZE - 2);
+  });
+}
+
+document.addEventListener('keydown', e => {
+  const m = {ArrowLeft:{x:-1,y:0}, ArrowRight:{x:1,y:0}, ArrowUp:{x:0,y:-1}, ArrowDown:{x:0,y:1}}[e.key];
+  if (m && (m.x !== -dir.x || m.y !== -dir.y)) { dir = m; e.preventDefault(); }
+});
+
+document.getElementById('start').onclick = () => {
+  if (timer) clearInterval(timer);
+  reset();
+  timer = setInterval(tick, 100);
+};
+
+reset();
+</script>
+</body>
+</html>

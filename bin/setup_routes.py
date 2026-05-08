@@ -716,6 +716,39 @@ def dispatch_get(path, qs):
             except Exception:
                 continue
         return 404, [('Content-Type', 'text/plain')], b'not found'
+    if path == '/games' or path == '/games/' or path == '/games/index.html':
+        # Bundled games index. Themed via /static/themes.css.
+        candidates = [
+            _resource_root() / 'games' / 'index.html',
+            Path(__file__).resolve().parent.parent / 'games' / 'index.html',
+        ]
+        for cand in candidates:
+            try:
+                if cand.exists() and cand.is_file():
+                    return 200, [('Content-Type', 'text/html; charset=utf-8')], cand.read_bytes()
+            except Exception:
+                continue
+        return 404, [('Content-Type', 'text/plain')], b'games not bundled'
+    if path.startswith('/games/'):
+        # Serve any games/*.html. No directory traversal allowed.
+        rel = path[len('/games/'):]
+        if not rel or '..' in rel.split('/') or '/' in rel:
+            return 404, [('Content-Type', 'text/plain')], b'not found'
+        candidates = [
+            _resource_root() / 'games' / rel,
+            Path(__file__).resolve().parent.parent / 'games' / rel,
+        ]
+        for cand in candidates:
+            try:
+                if cand.exists() and cand.is_file():
+                    ct = 'text/html; charset=utf-8' if rel.endswith('.html') else 'application/octet-stream'
+                    return 200, [
+                        ('Content-Type', ct),
+                        ('Cache-Control', 'public, max-age=300'),
+                    ], cand.read_bytes()
+            except Exception:
+                continue
+        return 404, [('Content-Type', 'text/plain')], b'not found'
     if path == '/' or path == '/index.html':
         # First-run UX: if setup hasn't been completed yet, redirect to the
         # wizard. Otherwise serve the polished Apocalypse.html landing page

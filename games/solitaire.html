@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Solitaire · Apocalypse</title>
+<link rel="stylesheet" href="/static/themes.css">
+<script src="/static/apply-theme.js"></script>
+<style>
+  .table { display: grid; grid-template-columns: repeat(7, 80px); gap: 8px; justify-content: center; margin-top: 12px; }
+  .top { display: grid; grid-template-columns: 80px 80px 1fr repeat(4, 80px); gap: 8px; align-items: start; margin-bottom: 16px; }
+  .pile { min-height: 110px; border: 1px dashed var(--border); border-radius: var(--border-radius); position: relative; }
+  .col { min-height: 360px; position: relative; }
+  .card { width: 80px; height: 110px; border: 1px solid var(--border); border-radius: var(--border-radius); background: var(--panel); position: absolute; top: 0; left: 0; padding: 6px; box-sizing: border-box; cursor: pointer; user-select: none; font-weight: bold; font-size: 14px; }
+  .card.back { background: var(--bg-glow); color: transparent; cursor: pointer; }
+  .card.back::after { content: '★'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-dim); font-size: 24px; }
+  .card.red { color: var(--warn); }
+  .card.black { color: var(--text-bright); }
+  .card .corner { display: flex; flex-direction: column; line-height: 1; }
+  .card .big { font-size: 32px; text-align: center; margin-top: 16px; }
+  .card.selected { box-shadow: 0 0 0 3px var(--ok); }
+  .actions { text-align: center; margin: 14px 0; display: flex; gap: 8px; justify-content: center; }
+  .help { color: var(--text-dim); margin-top: 14px; font-size: 12px; text-align: center; }
+  .meta { display: flex; gap: 12px; justify-content: center; margin-bottom: 12px; }
+  .pill { background: var(--bg-glow); border: 1px solid var(--border); border-radius: var(--border-radius); padding: 6px 14px; font-size: 12px; }
+  .pill .lbl { color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+  .pill .val { color: var(--text-bright); font-size: 18px; font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="frame" style="max-width: 700px;">
+  <div class="frame-header">
+    <h1>Solitaire</h1>
+    <a class="frame-back" href="/games">← all games</a>
+  </div>
+  <div class="meta">
+    <div class="pill"><div class="lbl">Moves</div><div class="val" id="moves">0</div></div>
+    <div class="pill"><div class="lbl">Status</div><div class="val" id="status">playing</div></div>
+  </div>
+  <div class="top">
+    <div class="pile" id="stock"></div>
+    <div class="pile" id="waste"></div>
+    <div></div>
+    <div class="pile" id="f0"></div>
+    <div class="pile" id="f1"></div>
+    <div class="pile" id="f2"></div>
+    <div class="pile" id="f3"></div>
+  </div>
+  <div class="table">
+    <div class="col pile" id="c0"></div>
+    <div class="col pile" id="c1"></div>
+    <div class="col pile" id="c2"></div>
+    <div class="col pile" id="c3"></div>
+    <div class="col pile" id="c4"></div>
+    <div class="col pile" id="c5"></div>
+    <div class="col pile" id="c6"></div>
+  </div>
+  <div class="actions"><button onclick="newGame()">New Deal</button></div>
+  <div class="help">Klondike. Click stock to draw. Click a card to select, then click a destination.</div>
+</div>
+
+<script>
+const SUITS = ['♠','♥','♦','♣'];
+const RANKS = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+const RED = new Set(['♥','♦']);
+
+let stock, waste, foundations, columns, selected, moves;
+
+function suitColor(s) { return RED.has(s) ? 'red' : 'black'; }
+function rankValue(r) { return RANKS.indexOf(r); }
+
+function newGame() {
+  const deck = [];
+  for (const s of SUITS) for (const r of RANKS) deck.push({suit:s, rank:r, faceUp:false});
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  columns = [[],[],[],[],[],[],[]];
+  for (let i = 0; i < 7; i++) for (let j = 0; j <= i; j++) {
+    const c = deck.pop();
+    if (j === i) c.faceUp = true;
+    columns[i].push(c);
+  }
+  stock = deck;
+  waste = [];
+  foundations = [[],[],[],[]];
+  selected = null;
+  moves = 0;
+  render();
+}
+
+function render() {
+  document.getElementById('moves').textContent = moves;
+  document.getElementById('status').textContent = checkWin() ? 'WINNER' : 'playing';
+
+  const stockEl = document.getElementById('stock');
+  stockEl.innerHTML = '';
+  if (stock.length) {
+    const card = makeCardEl({suit:'★', rank:'', faceUp:false}, true);
+    card.onclick = drawStock;
+    stockEl.appendChild(card);
+  } else if (waste.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-dim);cursor:pointer;';
+    empty.textContent = '↻';
+    empty.onclick = drawStock;
+    stockEl.appendChild(empty);
+  }
+
+  const wasteEl = document.getElementById('waste');
+  wasteEl.innerHTML = '';
+  if (waste.length) {
+    const top = waste[waste.length - 1];
+    const card = makeCardEl(top, true);
+    card.onclick = () => trySelect({source:'waste'});
+    if (selected && selected.source === 'waste') card.classList.add('selected');
+    wasteEl.appendChild(card);
+  }
+
+  for (let i = 0; i < 4; i++) {
+    const el = document.getElementById('f' + i);
+    el.innerHTML = '';
+    const f = foundations[i];
+    if (f.length) {
+      const card = makeCardEl(f[f.length - 1], true);
+      card.onclick = () => trySelect({source:'foundation', idx:i});
+      if (selected && selected.source === 'foundation' && selected.idx === i) card.classList.add('selected');
+      el.appendChild(card);
+    }
+    el.onclick = () => { if (!f.length) tryPlace({source:'foundation', idx:i}); };
+  }
+
+  for (let i = 0; i < 7; i++) {
+    const el = document.getElementById('c' + i);
+    el.innerHTML = '';
+    columns[i].forEach((card, idx) => {
+      const c = makeCardEl(card, card.faceUp);
+      c.style.top = (idx * 22) + 'px';
+      c.onclick = (e) => { e.stopPropagation(); trySelect({source:'column', col:i, idx:idx}); };
+      if (selected && selected.source === 'column' && selected.col === i && selected.idx <= idx) c.classList.add('selected');
+      el.appendChild(c);
+    });
+    el.onclick = () => { if (!columns[i].length) tryPlace({source:'column', col:i}); };
+  }
+}
+
+function makeCardEl(card, faceUp) {
+  const div = document.createElement('div');
+  div.className = 'card ' + (faceUp ? suitColor(card.suit) : 'back');
+  if (faceUp) {
+    div.innerHTML = `<div class="corner"><span>${card.rank}</span><span>${card.suit}</span></div><div class="big">${card.suit}</div>`;
+  }
+  return div;
+}
+
+function drawStock() {
+  if (stock.length) {
+    const c = stock.pop();
+    c.faceUp = true;
+    waste.push(c);
+  } else {
+    while (waste.length) {
+      const c = waste.pop();
+      c.faceUp = false;
+      stock.push(c);
+    }
+  }
+  selected = null;
+  moves++;
+  render();
+}
+
+function getSelectedCards() {
+  if (!selected) return null;
+  if (selected.source === 'waste') return [waste[waste.length - 1]];
+  if (selected.source === 'foundation') return [foundations[selected.idx][foundations[selected.idx].length - 1]];
+  if (selected.source === 'column') return columns[selected.col].slice(selected.idx);
+  return null;
+}
+
+function trySelect(target) {
+  // If clicking on a card and we have a selection, attempt move
+  if (selected) {
+    if (tryPlace(target)) return;
+    // Otherwise change selection
+  }
+  // Validate that target is a face-up card
+  if (target.source === 'column') {
+    const card = columns[target.col][target.idx];
+    if (!card || !card.faceUp) {
+      // If it's the topmost face-down, flip it (only if no selection)
+      if (!selected && target.idx === columns[target.col].length - 1 && card && !card.faceUp) {
+        card.faceUp = true;
+        moves++;
+        render();
+      }
+      return;
+    }
+  }
+  selected = target;
+  render();
+}
+
+function tryPlace(dest) {
+  if (!selected) return false;
+  const cards = getSelectedCards();
+  if (!cards || !cards.length) return false;
+  const top = cards[0];
+  if (dest.source === 'foundation') {
+    if (cards.length !== 1) return false;
+    const f = foundations[dest.idx];
+    if (!f.length && top.rank === 'A') {} 
+    else if (f.length && f[f.length - 1].suit === top.suit && rankValue(top.rank) === rankValue(f[f.length - 1].rank) + 1) {}
+    else return false;
+    foundations[dest.idx].push(top);
+    removeFromSource();
+    selected = null; moves++; render(); return true;
+  }
+  if (dest.source === 'column') {
+    const col = columns[dest.col];
+    if (!col.length && top.rank !== 'K') return false;
+    if (col.length) {
+      const t = col[col.length - 1];
+      if (suitColor(t.suit) === suitColor(top.suit)) return false;
+      if (rankValue(t.rank) !== rankValue(top.rank) + 1) return false;
+    }
+    columns[dest.col].push(...cards);
+    removeFromSource();
+    selected = null; moves++; render(); return true;
+  }
+  return false;
+}
+
+function removeFromSource() {
+  if (selected.source === 'waste') waste.pop();
+  else if (selected.source === 'foundation') foundations[selected.idx].pop();
+  else if (selected.source === 'column') {
+    columns[selected.col].splice(selected.idx);
+    // Auto-flip newly exposed
+    const c = columns[selected.col];
+    if (c.length && !c[c.length - 1].faceUp) c[c.length - 1].faceUp = true;
+  }
+}
+
+function checkWin() {
+  return foundations.every(f => f.length === 13);
+}
+
+newGame();
+</script>
+</body>
+</html>

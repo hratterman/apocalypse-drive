@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Breakout · Apocalypse</title>
+<link rel="stylesheet" href="/static/themes.css">
+<script src="/static/apply-theme.js"></script>
+<style>
+  .meta { display: flex; gap: 12px; justify-content: center; margin-bottom: 16px; }
+  .pill { background: var(--bg-glow); border: 1px solid var(--border); border-radius: var(--border-radius); padding: 6px 14px; font-size: 12px; }
+  .pill .lbl { color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+  .pill .val { color: var(--text-bright); font-size: 18px; font-weight: bold; }
+  canvas { background: var(--bg-glow); border: 1px solid var(--border); border-radius: var(--border-radius); display: block; margin: 0 auto; }
+  .actions { text-align: center; margin-top: 14px; }
+  .help { color: var(--text-dim); margin-top: 14px; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="frame-header">
+    <h1>Breakout</h1>
+    <a class="frame-back" href="/games">← all games</a>
+  </div>
+
+  <div class="meta">
+    <div class="pill"><div class="lbl">Score</div><div class="val" id="score">0</div></div>
+    <div class="pill"><div class="lbl">Lives</div><div class="val" id="lives">3</div></div>
+    <div class="pill"><div class="lbl">High</div><div class="val" id="high">0</div></div>
+  </div>
+
+  <canvas id="c" width="480" height="360"></canvas>
+  <div class="actions"><button id="start">Start</button></div>
+  <div class="help">←/→ or mouse to move paddle. Don't let the ball fall.</div>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const W = 480, H = 360;
+const PADDLE_W = 70, PADDLE_H = 8;
+const BALL_R = 6;
+const BRICK_ROWS = 5, BRICK_COLS = 10, BRICK_W = 44, BRICK_H = 16, BRICK_PAD = 4, BRICK_TOP = 30, BRICK_LEFT = 8;
+
+let paddleX, ball, bricks, score, lives, alive, running, animId;
+let high = parseInt(localStorage.getItem('breakout-high') || '0');
+document.getElementById('high').textContent = high;
+
+function getColor(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+function reset() {
+  paddleX = (W - PADDLE_W) / 2;
+  ball = {x: W/2, y: H - 40, vx: 2.5, vy: -2.5};
+  bricks = [];
+  for (let r = 0; r < BRICK_ROWS; r++) for (let c = 0; c < BRICK_COLS; c++) {
+    bricks.push({x: BRICK_LEFT + c * (BRICK_W + BRICK_PAD), y: BRICK_TOP + r * (BRICK_H + BRICK_PAD), alive: true, row: r});
+  }
+  score = 0;
+  lives = 3;
+  alive = true;
+  document.getElementById('score').textContent = 0;
+  document.getElementById('lives').textContent = lives;
+  draw();
+}
+
+function loseLife() {
+  lives--;
+  document.getElementById('lives').textContent = lives;
+  if (lives <= 0) {
+    alive = false;
+    if (score > high) { high = score; localStorage.setItem('breakout-high', high); document.getElementById('high').textContent = high; }
+    return;
+  }
+  ball = {x: W/2, y: H - 40, vx: 2.5, vy: -2.5};
+}
+
+function step() {
+  if (!alive) {
+    drawText('GAME OVER', getColor('--warn'));
+    running = false; return;
+  }
+  if (bricks.every(b => !b.alive)) {
+    drawText('CLEARED', getColor('--ok'));
+    alive = false; running = false;
+    if (score > high) { high = score; localStorage.setItem('breakout-high', high); document.getElementById('high').textContent = high; }
+    return;
+  }
+  ball.x += ball.vx;
+  ball.y += ball.vy;
+  if (ball.x < BALL_R || ball.x > W - BALL_R) ball.vx = -ball.vx;
+  if (ball.y < BALL_R) ball.vy = -ball.vy;
+  if (ball.y > H + BALL_R) { loseLife(); }
+  // paddle collision
+  if (ball.y + BALL_R >= H - PADDLE_H && ball.y < H && ball.x >= paddleX && ball.x <= paddleX + PADDLE_W) {
+    const hit = (ball.x - (paddleX + PADDLE_W/2)) / (PADDLE_W/2);
+    ball.vy = -Math.abs(ball.vy);
+    ball.vx = hit * 4;
+  }
+  // brick collisions
+  for (const b of bricks) {
+    if (!b.alive) continue;
+    if (ball.x + BALL_R >= b.x && ball.x - BALL_R <= b.x + BRICK_W &&
+        ball.y + BALL_R >= b.y && ball.y - BALL_R <= b.y + BRICK_H) {
+      b.alive = false;
+      score += (BRICK_ROWS - b.row) * 10;
+      document.getElementById('score').textContent = score;
+      ball.vy = -ball.vy;
+      break;
+    }
+  }
+  draw();
+  if (running) animId = requestAnimationFrame(step);
+}
+
+function draw() {
+  ctx.fillStyle = getColor('--bg-glow');
+  ctx.fillRect(0, 0, W, H);
+  // bricks
+  const colors = ['--warn', '--text-bright', '--ok', '--text', '--text-dim'];
+  for (const b of bricks) {
+    if (!b.alive) continue;
+    ctx.fillStyle = getColor(colors[b.row]);
+    ctx.fillRect(b.x, b.y, BRICK_W, BRICK_H);
+  }
+  // paddle
+  ctx.fillStyle = getColor('--text-bright');
+  ctx.fillRect(paddleX, H - PADDLE_H, PADDLE_W, PADDLE_H);
+  // ball
+  ctx.beginPath();
+  ctx.fillStyle = getColor('--text-bright');
+  ctx.arc(ball.x, ball.y, BALL_R, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawText(s, color) {
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = color;
+  ctx.font = 'bold 36px ' + getColor('--font-stack');
+  ctx.textAlign = 'center';
+  ctx.fillText(s, W/2, H/2);
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft') paddleX = Math.max(0, paddleX - 24);
+  else if (e.key === 'ArrowRight') paddleX = Math.min(W - PADDLE_W, paddleX + 24);
+});
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  paddleX = Math.max(0, Math.min(W - PADDLE_W, x - PADDLE_W/2));
+});
+
+document.getElementById('start').onclick = () => {
+  if (animId) cancelAnimationFrame(animId);
+  reset();
+  running = true;
+  step();
+};
+
+reset();
+</script>
+</body>
+</html>

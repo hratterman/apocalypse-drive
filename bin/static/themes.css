@@ -1,0 +1,225 @@
+/* ============================================================
+   Apocalypse Theme System (shared)
+   ============================================================
+   Drop this stylesheet on any page and call applyTheme(name) or
+   pre-set <html data-theme="..."> to inherit the same five themes
+   the Apocalypse landing page uses.
+
+   Variables every consumer can rely on:
+     --bg, --bg-glow, --panel, --border
+     --text, --text-bright, --text-dim, --text-faint
+     --warn, --ok
+     --font-stack, --font-size, --line-height
+     --text-shadow, --border-radius
+     --button-text-transform, --button-letter-spacing
+
+   Themes: terminal (default), paper, forest, solarized, geocities
+   ============================================================ */
+
+:root, [data-theme="terminal"] {
+  --bg: #0a0500;
+  --bg-glow: #1a0a00;
+  --panel: #110800;
+  --border: #3a2400;
+  --text: #ffb347;
+  --text-bright: #ffcc66;
+  --text-dim: #8a5a1f;
+  --text-faint: #5a3a14;
+  --warn: #ff5e3a;
+  --ok: #4ade80;
+  --font-stack: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-size: 14px;
+  --line-height: 1.55;
+  --text-shadow: 0 0 1px rgba(255, 179, 71, 0.5);
+  --button-text-transform: uppercase;
+  --button-letter-spacing: 1px;
+  --border-radius: 0;
+}
+
+[data-theme="paper"] {
+  --bg: #f5efe1;
+  --bg-glow: #f8f2e6;
+  --panel: #fdf8eb;
+  --border: #c9bd9f;
+  --text: #2a2620;
+  --text-bright: #1a1612;
+  --text-dim: #6b5f48;
+  --text-faint: #9b8d72;
+  --warn: #b04030;
+  --ok: #4a7a3d;
+  --font-stack: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  --font-size: 16px;
+  --line-height: 1.65;
+  --text-shadow: none;
+  --button-text-transform: none;
+  --button-letter-spacing: normal;
+  --border-radius: 4px;
+}
+
+[data-theme="forest"] {
+  --bg: #0e1612;
+  --bg-glow: #14201a;
+  --panel: #16201b;
+  --border: #2d4035;
+  --text: #c8d4c0;
+  --text-bright: #e8efd9;
+  --text-dim: #7a8a72;
+  --text-faint: #4a5a48;
+  --warn: #d4805e;
+  --ok: #9bc080;
+  --font-stack: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-size: 15px;
+  --line-height: 1.6;
+  --text-shadow: none;
+  --button-text-transform: none;
+  --button-letter-spacing: normal;
+  --border-radius: 6px;
+}
+
+[data-theme="solarized"] {
+  --bg: #fdf6e3;
+  --bg-glow: #fdf6e3;
+  --panel: #eee8d5;
+  --border: #d4cab1;
+  --text: #586e75;
+  --text-bright: #073642;
+  --text-dim: #93a1a1;
+  --text-faint: #b8b099;
+  --warn: #cb4b16;
+  --ok: #859900;
+  --font-stack: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  --font-size: 14px;
+  --line-height: 1.6;
+  --text-shadow: none;
+  --button-text-transform: none;
+  --button-letter-spacing: normal;
+  --border-radius: 4px;
+}
+
+[data-theme="geocities"] {
+  --bg: #000080;
+  --bg-glow: #000080;
+  --panel: #c0c0c0;
+  --border: #000000;
+  --text: #ffff00;
+  --text-bright: #00ffff;
+  --text-dim: #ff00ff;
+  --text-faint: #ffffff;
+  --warn: #ff0000;
+  --ok: #00ff00;
+  --font-stack: 'Comic Sans MS', 'Chalkboard SE', cursive;
+  --font-size: 14px;
+  --line-height: 1.4;
+  --text-shadow: 1px 1px 0 #000000, 2px 2px 0 #ff00ff;
+  --button-text-transform: none;
+  --button-letter-spacing: normal;
+  --border-radius: 0;
+}
+
+/* Geocities: tiled stars background and rainbow header. */
+[data-theme="geocities"] body {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'><rect width='80' height='80' fill='%23000080'/><text x='10' y='20' fill='%23ffff00' font-family='serif' font-size='14'>★</text><text x='50' y='40' fill='%23ffffff' font-family='serif' font-size='10'>✦</text><text x='25' y='65' fill='%23ff00ff' font-family='serif' font-size='12'>✧</text><text x='65' y='75' fill='%2300ffff' font-family='serif' font-size='8'>✦</text></svg>") !important;
+  background-attachment: fixed !important;
+  background-repeat: repeat !important;
+}
+
+/* ---- Shared base styles (consumed by /games) ---- */
+
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-stack);
+  font-size: var(--font-size);
+  line-height: var(--line-height);
+  text-shadow: var(--text-shadow);
+  margin: 0;
+  padding: 0;
+}
+
+a { color: var(--text-bright); }
+a:hover { color: var(--warn); }
+
+button, .btn {
+  background: var(--panel);
+  color: var(--text-bright);
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  font-family: var(--font-stack);
+  font-size: var(--font-size);
+  text-transform: var(--button-text-transform);
+  letter-spacing: var(--button-letter-spacing);
+  border-radius: var(--border-radius);
+  cursor: pointer;
+}
+button:hover, .btn:hover { background: var(--bg-glow); }
+
+[data-theme="geocities"] button,
+[data-theme="geocities"] .btn {
+  background: #c0c0c0 !important;
+  color: #000080 !important;
+  border: 3px outset #ffffff !important;
+  font-family: 'Times New Roman', serif !important;
+  font-weight: bold !important;
+}
+
+.frame {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.frame-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin-bottom: 24px;
+}
+
+[data-theme="geocities"] .frame-header {
+  background: linear-gradient(90deg, #ff00ff, #00ffff, #ffff00, #ff0000) !important;
+  border-bottom: 4px ridge #c0c0c0 !important;
+  padding: 10px 16px !important;
+  margin: -24px -24px 24px -24px !important;
+}
+
+.frame-header h1 {
+  margin: 0;
+  font-size: 22px;
+  color: var(--text-bright);
+  text-transform: var(--button-text-transform);
+  letter-spacing: var(--button-letter-spacing);
+}
+
+[data-theme="geocities"] .frame-header h1 {
+  font-family: 'Times New Roman', serif !important;
+  color: #ffffff !important;
+  text-transform: none !important;
+  text-shadow: 2px 2px 0 #000000, 4px 4px 0 #ff00ff !important;
+}
+
+.frame-header h1::before { content: var(--label-prefix, ''); color: var(--text-dim); }
+[data-theme="geocities"] .frame-header h1::before { content: '★ ' !important; color: #ffff00 !important; }
+[data-theme="geocities"] .frame-header h1::after { content: ' ★' !important; color: #ffff00 !important; }
+
+.frame-back {
+  font-size: 13px;
+  color: var(--text-dim);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--border);
+}
+.frame-back:hover { color: var(--text-bright); }
+
+.frame-stage {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--border-radius);
+  padding: 20px;
+}
+
+[data-theme="geocities"] .frame-stage {
+  border: 4px ridge #ffffff !important;
+}
+
+.muted { color: var(--text-dim); font-size: 12px; }

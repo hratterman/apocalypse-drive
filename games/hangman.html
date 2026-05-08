@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hangman · Apocalypse</title>
+<link rel="stylesheet" href="/static/themes.css">
+<script src="/static/apply-theme.js"></script>
+<style>
+  .meta { display: flex; gap: 12px; justify-content: center; margin-bottom: 16px; }
+  .pill { background: var(--bg-glow); border: 1px solid var(--border); border-radius: var(--border-radius); padding: 6px 14px; font-size: 12px; }
+  .pill .lbl { color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+  .pill .val { color: var(--text-bright); font-size: 16px; font-weight: bold; }
+  .gallows { display: flex; justify-content: center; margin-bottom: 12px; }
+  .gallows pre { font-family: var(--font-stack); color: var(--text); font-size: 16px; line-height: 1.2; margin: 0; white-space: pre; }
+  .word { text-align: center; font-size: 32px; letter-spacing: 12px; margin: 16px 0; color: var(--text-bright); font-weight: bold; }
+  .clue { text-align: center; color: var(--text-dim); margin-bottom: 16px; font-size: 13px; }
+  .keyboard { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 480px; margin: 0 auto; }
+  .key { padding: 10px; min-width: 32px; background: var(--panel); color: var(--text-bright); border: 1px solid var(--border); border-radius: var(--border-radius); font-weight: bold; cursor: pointer; font-family: var(--font-stack); font-size: 13px; text-transform: uppercase; }
+  .key.hit  { background: var(--ok);   color: var(--bg); }
+  .key.miss { background: var(--warn); color: var(--bg); }
+  .key:disabled { cursor: not-allowed; }
+  .actions { text-align: center; margin: 14px 0; }
+  .msg { text-align: center; min-height: 22px; color: var(--text-bright); font-weight: bold; margin: 10px 0; }
+  .help { color: var(--text-dim); margin-top: 14px; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="frame-header">
+    <h1>Hangman</h1>
+    <a class="frame-back" href="/games">← all games</a>
+  </div>
+
+  <div class="meta">
+    <div class="pill"><div class="lbl">Lives</div><div class="val" id="lives">6</div></div>
+    <div class="pill"><div class="lbl">Won</div><div class="val" id="wins">0</div></div>
+    <div class="pill"><div class="lbl">Lost</div><div class="val" id="losses">0</div></div>
+  </div>
+
+  <div class="gallows"><pre id="gallows"></pre></div>
+  <div class="clue" id="clue"></div>
+  <div class="word" id="word"></div>
+  <div class="msg" id="msg"></div>
+  <div class="keyboard" id="kb"></div>
+
+  <div class="actions"><button onclick="newRound()">New Word</button></div>
+  <div class="help">Six wrong guesses and you're hung. Type or click letters.</div>
+</div>
+
+<script>
+const WORDS = [
+  ['penicillin', 'first widely used antibiotic'],
+  ['compass', 'finds north when GPS is dead'],
+  ['firewood', 'split it before winter'],
+  ['radio', 'one-way news in the dark'],
+  ['library', 'where the books survived'],
+  ['canvas', 'tent material that won\'t rot fast'],
+  ['kerosene', 'lamp fuel'],
+  ['solar', 'panels charge the radio'],
+  ['filter', 'water needs one'],
+  ['fiber', 'twine, rope, eventually rope bridges'],
+  ['shelter', 'first need after water'],
+  ['barter', 'no banks, no money, but swap'],
+  ['signal', 'three of anything means help'],
+  ['vaccine', 'civilization in a vial'],
+  ['windmill', 'pumps water without electricity'],
+  ['leather', 'tanned hide'],
+  ['ferment', 'how to preserve cabbage and turnips'],
+  ['vinegar', 'preservative and disinfectant'],
+  ['charcoal', 'water filter and tooth scrub'],
+  ['knot', 'bowline, clove hitch, taut-line'],
+  ['compass', 'finds north when GPS is dead'],
+  ['steel', 'iron with carbon, sharpens edges'],
+  ['flint', 'strikes sparks against steel'],
+  ['lantern', 'better than a torch in wind'],
+  ['root', 'dig for sustenance'],
+  ['preserve', 'jam, pickle, smoke, salt'],
+  ['salt', 'preserves meat and your sanity'],
+  ['canopy', 'forest shelter overhead'],
+  ['pulley', 'a rope and a wheel multiply force'],
+  ['lever', 'give me a place to stand']
+];
+
+const STAGES = [
+  // 0 lives lost
+  `  +---+
+  |   |
+      |
+      |
+      |
+      |
+=========`,
+  `  +---+
+  |   |
+  O   |
+      |
+      |
+      |
+=========`,
+  `  +---+
+  |   |
+  O   |
+  |   |
+      |
+      |
+=========`,
+  `  +---+
+  |   |
+  O   |
+ /|   |
+      |
+      |
+=========`,
+  `  +---+
+  |   |
+  O   |
+ /|\\  |
+      |
+      |
+=========`,
+  `  +---+
+  |   |
+  O   |
+ /|\\  |
+ /    |
+      |
+=========`,
+  `  +---+
+  |   |
+  O   |
+ /|\\  |
+ / \\  |
+      |
+=========`
+];
+
+let answer, clue, guessed, wrong, finished;
+let wins = parseInt(localStorage.getItem('hangman-wins') || '0');
+let losses = parseInt(localStorage.getItem('hangman-losses') || '0');
+document.getElementById('wins').textContent = wins;
+document.getElementById('losses').textContent = losses;
+
+function newRound() {
+  const pick = WORDS[Math.floor(Math.random() * WORDS.length)];
+  answer = pick[0].toLowerCase();
+  clue = pick[1];
+  guessed = new Set();
+  wrong = 0;
+  finished = false;
+  document.getElementById('msg').textContent = '';
+  document.getElementById('clue').textContent = clue;
+  buildKb();
+  render();
+}
+
+function buildKb() {
+  const kb = document.getElementById('kb');
+  kb.innerHTML = '';
+  for (let i = 97; i <= 122; i++) {
+    const ch = String.fromCharCode(i);
+    const k = document.createElement('button');
+    k.className = 'key';
+    k.textContent = ch;
+    k.dataset.k = ch;
+    k.onclick = () => guess(ch);
+    kb.appendChild(k);
+  }
+}
+
+function guess(ch) {
+  if (finished || guessed.has(ch)) return;
+  guessed.add(ch);
+  const key = document.querySelector(`.key[data-k="${ch}"]`);
+  if (answer.includes(ch)) {
+    if (key) key.classList.add('hit');
+  } else {
+    wrong++;
+    if (key) key.classList.add('miss');
+  }
+  if (key) key.disabled = true;
+  if (wrong >= 6) {
+    finished = true;
+    losses++;
+    localStorage.setItem('hangman-losses', losses);
+    document.getElementById('losses').textContent = losses;
+    document.getElementById('msg').textContent = `Hung. The word was: ${answer.toUpperCase()}`;
+  } else if ([...answer].every(c => c === ' ' || guessed.has(c))) {
+    finished = true;
+    wins++;
+    localStorage.setItem('hangman-wins', wins);
+    document.getElementById('wins').textContent = wins;
+    document.getElementById('msg').textContent = 'You got it.';
+  }
+  render();
+}
+
+function render() {
+  document.getElementById('lives').textContent = 6 - wrong;
+  document.getElementById('gallows').textContent = STAGES[wrong];
+  let display = '';
+  for (const ch of answer) {
+    if (ch === ' ') display += '  ';
+    else if (guessed.has(ch) || finished) display += ch.toUpperCase();
+    else display += '_';
+  }
+  document.getElementById('word').textContent = display;
+}
+
+document.addEventListener('keydown', e => {
+  if (/^[a-zA-Z]$/.test(e.key)) guess(e.key.toLowerCase());
+});
+
+newRound();
+</script>
+</body>
+</html>

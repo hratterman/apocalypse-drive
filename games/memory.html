@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Memory · Apocalypse</title>
+<link rel="stylesheet" href="/static/themes.css">
+<script src="/static/apply-theme.js"></script>
+<style>
+  .meta { display: flex; gap: 12px; justify-content: center; margin-bottom: 16px; }
+  .pill { background: var(--bg-glow); border: 1px solid var(--border); border-radius: var(--border-radius); padding: 6px 14px; font-size: 12px; }
+  .pill .lbl { color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+  .pill .val { color: var(--text-bright); font-size: 18px; font-weight: bold; }
+  .grid { display: grid; grid-template-columns: repeat(6, 70px); gap: 8px; justify-content: center; }
+  .card { width: 70px; height: 90px; background: var(--bg-glow); border: 1px solid var(--border); border-radius: var(--border-radius); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 32px; color: var(--text-bright); user-select: none; transition: background 0.15s; }
+  .card.hidden { font-size: 0; }
+  .card.matched { background: var(--ok); color: var(--bg); cursor: default; }
+  .actions { text-align: center; margin: 14px 0; }
+  .help { color: var(--text-dim); margin-top: 14px; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="frame-header">
+    <h1>Memory</h1>
+    <a class="frame-back" href="/games">← all games</a>
+  </div>
+
+  <div class="meta">
+    <div class="pill"><div class="lbl">Moves</div><div class="val" id="moves">0</div></div>
+    <div class="pill"><div class="lbl">Pairs</div><div class="val" id="pairs">0/12</div></div>
+    <div class="pill"><div class="lbl">Best</div><div class="val" id="best">--</div></div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <div class="actions"><button onclick="newGame()">New Game</button></div>
+  <div class="help">Find every pair. Lower moves = better.</div>
+</div>
+
+<script>
+const SYMBOLS = ['☀','☂','♛','★','♞','✿','♪','☘','✈','♻','⚓','✪'];
+let cards, flipped, matched, moves, locked;
+let best = parseInt(localStorage.getItem('memory-best') || '0');
+document.getElementById('best').textContent = best || '--';
+
+function newGame() {
+  const deck = [...SYMBOLS, ...SYMBOLS];
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  cards = deck.map((s, i) => ({sym:s, id:i, revealed:false, matched:false}));
+  flipped = [];
+  matched = 0;
+  moves = 0;
+  locked = false;
+  render();
+}
+
+function render() {
+  const g = document.getElementById('grid');
+  g.innerHTML = '';
+  cards.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'card';
+    if (c.matched) { d.classList.add('matched'); d.textContent = c.sym; }
+    else if (c.revealed) { d.textContent = c.sym; }
+    else { d.classList.add('hidden'); d.textContent = '?'; }
+    d.onclick = () => flip(c);
+    g.appendChild(d);
+  });
+  document.getElementById('moves').textContent = moves;
+  document.getElementById('pairs').textContent = matched + '/12';
+}
+
+function flip(c) {
+  if (locked || c.revealed || c.matched) return;
+  c.revealed = true;
+  flipped.push(c);
+  render();
+  if (flipped.length === 2) {
+    moves++;
+    document.getElementById('moves').textContent = moves;
+    if (flipped[0].sym === flipped[1].sym) {
+      flipped[0].matched = true; flipped[1].matched = true;
+      matched++;
+      flipped = [];
+      render();
+      if (matched === 12) {
+        if (!best || moves < best) {
+          best = moves;
+          localStorage.setItem('memory-best', best);
+          document.getElementById('best').textContent = best;
+          setTimeout(() => alert('New best: ' + moves + ' moves!'), 100);
+        } else {
+          setTimeout(() => alert('Done in ' + moves + ' moves.'), 100);
+        }
+      }
+    } else {
+      locked = true;
+      setTimeout(() => {
+        flipped[0].revealed = false; flipped[1].revealed = false;
+        flipped = [];
+        locked = false;
+        render();
+      }, 800);
+    }
+  }
+}
+
+newGame();
+</script>
+</body>
+</html>

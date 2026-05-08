@@ -59,6 +59,7 @@ datas = [
     (str(ROOT / 'bin' / 'static'),            'bin/static'),
     (str(ROOT / 'data' / 'catalog.json'),     'data'),
     (str(ROOT / 'Apocalypse.html'),           '.'),
+    (str(ROOT / 'games'),                     'games'),
 ]
 
 binaries = _find_libzim()

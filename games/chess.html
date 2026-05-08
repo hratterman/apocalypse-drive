@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chess · Apocalypse</title>
+<link rel="stylesheet" href="/static/themes.css">
+<script src="/static/apply-theme.js"></script>
+<style>
+  .meta { display: flex; gap: 12px; justify-content: center; margin-bottom: 16px; }
+  .pill { background: var(--bg-glow); border: 1px solid var(--border); border-radius: var(--border-radius); padding: 6px 14px; font-size: 12px; }
+  .pill .lbl { color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; }
+  .pill .val { color: var(--text-bright); font-size: 16px; font-weight: bold; }
+  .board { display: grid; grid-template-columns: repeat(8, 50px); grid-template-rows: repeat(8, 50px); margin: 0 auto; border: 2px solid var(--border); width: 400px; }
+  .sq { display: flex; align-items: center; justify-content: center; font-size: 32px; cursor: pointer; user-select: none; }
+  .sq.light { background: var(--panel); }
+  .sq.dark  { background: var(--bg-glow); }
+  .sq.sel   { background: var(--ok) !important; }
+  .sq.move  { box-shadow: inset 0 0 0 3px var(--warn); }
+  [data-theme="paper"] .sq, [data-theme="solarized"] .sq { color: #1a1612; }
+  [data-theme="terminal"] .piece-w, [data-theme="forest"] .piece-w { color: #f5efe1; }
+  [data-theme="terminal"] .piece-b, [data-theme="forest"] .piece-b { color: #1a1612; text-shadow: 0 0 0 var(--text-faint); }
+  [data-theme="paper"] .piece-w, [data-theme="solarized"] .piece-w { color: #fdf6e3; text-shadow: 0 0 1px #1a1612; }
+  [data-theme="paper"] .piece-b, [data-theme="solarized"] .piece-b { color: #1a1612; }
+  [data-theme="geocities"] .piece-w { color: #ffffff; text-shadow: 1px 1px 0 #000000; }
+  [data-theme="geocities"] .piece-b { color: #000000; }
+  .actions { text-align: center; margin: 14px 0; }
+  .help { color: var(--text-dim); margin-top: 14px; font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="frame-header">
+    <h1>Chess</h1>
+    <a class="frame-back" href="/games">← all games</a>
+  </div>
+  <div class="meta">
+    <div class="pill"><div class="lbl">Turn</div><div class="val" id="turn">White</div></div>
+    <div class="pill"><div class="lbl">Status</div><div class="val" id="status">playing</div></div>
+  </div>
+  <div class="board" id="board"></div>
+  <div class="actions"><button onclick="newGame()">New Game</button></div>
+  <div class="help">You play white. AI thinks 2 moves deep. No castling, no en passant, no promotion-choice (auto-queen). Apocalypse-grade chess.</div>
+</div>
+
+<script>
+// Pieces: uppercase white, lowercase black. '.' empty.
+const PIECES = {K:'♔',Q:'♕',R:'♖',B:'♗',N:'♘',P:'♙', k:'♚',q:'♛',r:'♜',b:'♝',n:'♞',p:'♟'};
+const VALUES = {K:0,Q:9,R:5,B:3,N:3,P:1, k:0,q:9,r:5,b:3,n:3,p:1};
+
+let board, turn, sel, status;
+
+function newGame() {
+  board = [
+    ['r','n','b','q','k','b','n','r'],
+    ['p','p','p','p','p','p','p','p'],
+    ['.','.','.','.','.','.','.','.'],
+    ['.','.','.','.','.','.','.','.'],
+    ['.','.','.','.','.','.','.','.'],
+    ['.','.','.','.','.','.','.','.'],
+    ['P','P','P','P','P','P','P','P'],
+    ['R','N','B','Q','K','B','N','R']
+  ];
+  turn = 'w';
+  sel = null;
+  status = 'playing';
+  render();
+}
+
+function isWhite(p) { return p !== '.' && p === p.toUpperCase(); }
+function isBlack(p) { return p !== '.' && p === p.toLowerCase(); }
+function ofTurn(p) { return turn === 'w' ? isWhite(p) : isBlack(p); }
+function clone(b) { return b.map(r => r.slice()); }
+
+function pseudoMoves(b, side) {
+  const moves = [];
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const p = b[r][c];
+    if (p === '.') continue;
+    const w = isWhite(p);
+    if ((side === 'w' && !w) || (side === 'b' && w)) continue;
+    const k = p.toUpperCase();
+    if (k === 'P') {
+      const dir = w ? -1 : 1;
+      const start = w ? 6 : 1;
+      const promo = w ? 0 : 7;
+      const f = r + dir;
+      if (f >= 0 && f < 8) {
+        if (b[f][c] === '.') {
+          moves.push([r,c,f,c]);
+          if (r === start && b[f + dir]?.[c] === '.') moves.push([r,c,f+dir,c]);
+        }
+        for (const dc of [-1,1]) {
+          const nc = c + dc;
+          if (nc < 0 || nc > 7) continue;
+          const t = b[f][nc];
+          if (t !== '.' && (w ? isBlack(t) : isWhite(t))) moves.push([r,c,f,nc]);
+        }
+      }
+    } else if (k === 'N') {
+      for (const [dr,dc] of [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]]) {
+        const nr = r + dr, nc = c + dc;
+        if (nr<0||nr>7||nc<0||nc>7) continue;
+        const t = b[nr][nc];
+        if (t === '.' || (w ? isBlack(t) : isWhite(t))) moves.push([r,c,nr,nc]);
+      }
+    } else if (k === 'K') {
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const nr = r + dr, nc = c + dc;
+        if (nr<0||nr>7||nc<0||nc>7) continue;
+        const t = b[nr][nc];
+        if (t === '.' || (w ? isBlack(t) : isWhite(t))) moves.push([r,c,nr,nc]);
+      }
+    } else {
+      const dirs = [];
+      if (k === 'R' || k === 'Q') dirs.push([-1,0],[1,0],[0,-1],[0,1]);
+      if (k === 'B' || k === 'Q') dirs.push([-1,-1],[-1,1],[1,-1],[1,1]);
+      for (const [dr,dc] of dirs) {
+        let nr = r + dr, nc = c + dc;
+        while (nr>=0 && nr<8 && nc>=0 && nc<8) {
+          const t = b[nr][nc];
+          if (t === '.') moves.push([r,c,nr,nc]);
+          else { if (w ? isBlack(t) : isWhite(t)) moves.push([r,c,nr,nc]); break; }
+          nr += dr; nc += dc;
+        }
+      }
+    }
+  }
+  return moves;
+}
+
+function inCheck(b, side) {
+  const kingChar = side === 'w' ? 'K' : 'k';
+  let kr=-1, kc=-1;
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++) if (b[r][c] === kingChar) { kr=r; kc=c; }
+  if (kr === -1) return true;
+  const opp = side === 'w' ? 'b' : 'w';
+  return pseudoMoves(b, opp).some(m => m[2] === kr && m[3] === kc);
+}
+
+function legalMoves(b, side) {
+  return pseudoMoves(b, side).filter(m => {
+    const nb = clone(b);
+    apply(nb, m);
+    return !inCheck(nb, side);
+  });
+}
+
+function apply(b, m) {
+  const [r1,c1,r2,c2] = m;
+  let p = b[r1][c1];
+  // Auto-promote pawns
+  if (p === 'P' && r2 === 0) p = 'Q';
+  else if (p === 'p' && r2 === 7) p = 'q';
+  b[r2][c2] = p;
+  b[r1][c1] = '.';
+}
+
+function evaluate(b) {
+  let s = 0;
+  for (let r=0;r<8;r++) for (let c=0;c<8;c++) {
+    const p = b[r][c];
+    if (p === '.') continue;
+    const v = VALUES[p];
+    s += isWhite(p) ? v : -v;
+  }
+  return s; // positive favors white
+}
+
+// Minimax with alpha-beta, depth 2 plies (= 1 white move + 1 black response thought)
+function minimax(b, depth, alpha, beta, side) {
+  if (depth === 0) return evaluate(b);
+  const moves = legalMoves(b, side);
+  if (!moves.length) {
+    if (inCheck(b, side)) return side === 'w' ? -10000 : 10000;
+    return 0; // stalemate
+  }
+  if (side === 'w') {
+    let best = -Infinity;
+    for (const m of moves) {
+      const nb = clone(b); apply(nb, m);
+      const v = minimax(nb, depth - 1, alpha, beta, 'b');
+      best = Math.max(best, v);
+      alpha = Math.max(alpha, v);
+      if (beta <= alpha) break;
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (const m of moves) {
+      const nb = clone(b); apply(nb, m);
+      const v = minimax(nb, depth - 1, alpha, beta, 'w');
+      best = Math.min(best, v);
+      beta = Math.min(beta, v);
+      if (beta <= alpha) break;
+    }
+    return best;
+  }
+}
+
+function aiMove() {
+  const moves = legalMoves(board, 'b');
+  if (!moves.length) {
+    status = inCheck(board, 'b') ? 'White wins' : 'Stalemate';
+    render(); return;
+  }
+  // Shuffle for variety on equal-eval moves
+  for (let i = moves.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [moves[i], moves[j]] = [moves[j], moves[i]];
+  }
+  let bestMove = moves[0], bestVal = Infinity;
+  for (const m of moves) {
+    const nb = clone(board); apply(nb, m);
+    const v = minimax(nb, 2, -Infinity, Infinity, 'w');
+    if (v < bestVal) { bestVal = v; bestMove = m; }
+  }
+  apply(board, bestMove);
+  turn = 'w';
+  // Check player status
+  const myMoves = legalMoves(board, 'w');
+  if (!myMoves.length) status = inCheck(board, 'w') ? 'Black wins' : 'Stalemate';
+  render();
+}
+
+function render() {
+  document.getElementById('turn').textContent = turn === 'w' ? 'White (you)' : 'Black (AI)';
+  document.getElementById('status').textContent = status;
+  const el = document.getElementById('board');
+  el.innerHTML = '';
+  let legal = [];
+  if (sel) legal = legalMoves(board, 'w').filter(m => m[0] === sel[0] && m[1] === sel[1]);
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const sq = document.createElement('div');
+    sq.className = 'sq ' + ((r + c) % 2 ? 'dark' : 'light');
+    if (sel && sel[0] === r && sel[1] === c) sq.classList.add('sel');
+    if (legal.some(m => m[2] === r && m[3] === c)) sq.classList.add('move');
+    const p = board[r][c];
+    if (p !== '.') {
+      const sp = document.createElement('span');
+      sp.className = isWhite(p) ? 'piece-w' : 'piece-b';
+      sp.textContent = PIECES[p];
+      sq.appendChild(sp);
+    }
+    sq.onclick = () => onClick(r, c);
+    el.appendChild(sq);
+  }
+}
+
+function onClick(r, c) {
+  if (turn !== 'w' || status !== 'playing') return;
+  if (sel) {
+    const [sr, sc] = sel;
+    const moves = legalMoves(board, 'w');
+    const m = moves.find(x => x[0] === sr && x[1] === sc && x[2] === r && x[3] === c);
+    if (m) {
+      apply(board, m);
+      sel = null;
+      turn = 'b';
+      render();
+      setTimeout(aiMove, 100);
+      return;
+    }
+    sel = null;
+  }
+  if (board[r][c] !== '.' && isWhite(board[r][c])) sel = [r, c];
+  render();
+}
+
+newGame();
+</script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wordle · Apocalypse</title>
+<link rel="stylesheet" href="/static/themes.css">
+<script src="/static/apply-theme.js"></script>
+<style>
+  .grid { display: grid; grid-template-rows: repeat(6, 1fr); gap: 6px; margin: 0 auto 16px; max-width: 320px; }
+  .row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .tile { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 26px; text-transform: uppercase; border: 2px solid var(--border); background: var(--panel); color: var(--text-bright); border-radius: var(--border-radius); }
+  .tile.filled { border-color: var(--text-dim); }
+  .tile.absent  { background: var(--bg-glow);    color: var(--text-faint); border-color: var(--bg-glow); }
+  .tile.present { background: var(--warn);       color: var(--bg);          border-color: var(--warn); }
+  .tile.correct { background: var(--ok);         color: var(--bg);          border-color: var(--ok); }
+  .keyboard { display: flex; flex-direction: column; gap: 6px; max-width: 480px; margin: 0 auto; }
+  .krow { display: flex; gap: 4px; justify-content: center; }
+  .key { padding: 12px 8px; min-width: 32px; background: var(--panel); color: var(--text-bright); border: 1px solid var(--border); border-radius: var(--border-radius); font-weight: bold; cursor: pointer; font-family: var(--font-stack); font-size: 13px; text-transform: uppercase; }
+  .key.wide { min-width: 60px; font-size: 11px; }
+  .key.absent  { background: var(--bg-glow); color: var(--text-faint); }
+  .key.present { background: var(--warn); color: var(--bg); }
+  .key.correct { background: var(--ok); color: var(--bg); }
+  .help { color: var(--text-dim); margin-top: 14px; font-size: 12px; text-align: center; }
+  .msg { text-align: center; margin: 10px 0; min-height: 22px; color: var(--text-bright); font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="frame-header">
+    <h1>Wordle</h1>
+    <a class="frame-back" href="/games">← all games</a>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="msg" id="msg"></div>
+  <div class="keyboard" id="kb"></div>
+  <div class="help">Six guesses. Five letters. Green = right spot. Yellow = wrong spot. New word each day.</div>
+</div>
+
+<script>
+// Curated common 5-letter answer list (~300 words). All present-tense common
+// English nouns/verbs. Bundled inline so the game works offline with zero
+// network calls.
+const WORDS = ["about","above","abuse","actor","acute","admit","adopt","adult","after","again","agent","agree","ahead","alarm","album","alert","alike","alive","allow","alone","along","alter","among","anger","angle","angry","apart","apple","apply","arena","argue","arise","array","aside","asset","audio","audit","avoid","awake","award","aware","badly","baker","bases","basic","beach","began","begin","begun","being","below","bench","billy","birth","black","blame","blind","block","blood","board","boost","booth","bound","brain","brand","bread","break","breed","brief","bring","broad","broke","brown","build","built","buyer","cable","calif","carry","catch","cause","chain","chair","chart","chase","cheap","check","chest","chief","child","china","chose","civil","claim","class","clean","clear","click","clock","close","coach","coast","could","count","court","cover","craft","crash","cream","crime","cross","crowd","crown","curve","cycle","daily","dance","dated","dealt","death","debut","delay","depth","doing","doubt","dozen","draft","drama","drawn","dream","dress","drill","drink","drive","drove","dying","eager","early","earth","eight","elite","empty","enemy","enjoy","enter","entry","equal","error","event","every","exact","exist","extra","faith","false","fault","fiber","field","fifth","fifty","fight","final","first","fixed","flash","fleet","floor","fluid","focus","force","forth","forty","forum","found","frame","frank","fraud","fresh","front","fruit","fully","funny","giant","given","glass","globe","going","grace","grade","grand","grant","grass","great","green","gross","group","grown","guard","guess","guest","guide","happy","harry","heart","heavy","hence","henry","horse","hotel","house","human","ideal","image","index","inner","input","issue","japan","jimmy","joint","jones","judge","known","label","large","laser","later","laugh","layer","learn","lease","least","leave","legal","level","lewis","light","limit","links","lives","local","logic","loose","lower","lucky","lunch","lying","magic","major","maker","march","maria","match","maybe","mayor","meant","media","metal","might","minor","minus","mixed","model","money","month","moral","motor","mount","mouse","mouth","movie","music","needs","never","newly","night","noise","north","noted","novel","nurse","occur","ocean","offer","often","order","other","ought","paint","panel","paper","party","peace","peter","phase","phone","photo","piece","pilot","pitch","place","plain","plane","plant","plate","point","pound","power","press","price","pride","prime","print","prior","prize","proof","proud","prove","queen","quick","quiet","quite","radio","raise","range","rapid","ratio","reach","ready","refer","right","rival","river","robin","roger","roman","rough","round","route","royal","rural","scale","scene","scope","score","sense","serve","seven","shall","shape","share","sharp","sheet","shelf","shell","shift","shirt","shock","shoot","short","shown","sight","since","sixth","sixty","sized","skill","sleep","slide","small","smart","smile","smith","smoke","solid","solve","sorry","sound","south","space","spare","speak","speed","spend","spent","split","spoke","sport","staff","stage","stake","stand","start","state","steam","steel","stick","still","stock","stone","stood","store","storm","story","strip","stuck","study","stuff","style","sugar","suite","super","sweet","table","taken","taste","taxes","teach","teeth","texas","thank","theft","their","theme","there","these","thick","thing","think","third","those","three","threw","throw","tight","times","tired","title","today","topic","total","touch","tough","tower","track","trade","train","treat","trend","trial","tried","tries","truck","truly","trust","truth","twice","under","undue","union","unity","until","upper","upset","urban","usage","usual","valid","value","video","virus","visit","vital","voice","waste","watch","water","wheel","where","which","while","white","whole","whose","woman","women","world","worry","worse","worst","worth","would","wound","write","wrong","wrote","yield","young","youth"];
+
+const ROWS = 6, COLS = 5;
+let answer, guesses, currentRow, currentCol, finished;
+
+function todaySeed() {
+  const d = new Date();
+  return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+}
+
+function pickAnswer() {
+  // Deterministic per-day so reload doesn't change the answer.
+  const seed = todaySeed();
+  return WORDS[seed % WORDS.length];
+}
+
+function init() {
+  answer = pickAnswer();
+  guesses = [];
+  currentRow = 0;
+  currentCol = 0;
+  finished = false;
+  buildGrid();
+  buildKeyboard();
+  document.getElementById('msg').textContent = '';
+}
+
+function buildGrid() {
+  const g = document.getElementById('grid');
+  g.innerHTML = '';
+  for (let r = 0; r < ROWS; r++) {
+    const row = document.createElement('div');
+    row.className = 'row';
+    for (let c = 0; c < COLS; c++) {
+      const t = document.createElement('div');
+      t.className = 'tile';
+      t.id = `t-${r}-${c}`;
+      row.appendChild(t);
+    }
+    g.appendChild(row);
+  }
+}
+
+function buildKeyboard() {
+  const layout = ['qwertyuiop', 'asdfghjkl', '\nzxcvbnm\b'];
+  const kb = document.getElementById('kb');
+  kb.innerHTML = '';
+  layout.forEach(line => {
+    const row = document.createElement('div');
+    row.className = 'krow';
+    for (const ch of line) {
+      const k = document.createElement('div');
+      k.className = 'key';
+      if (ch === '\n') { k.textContent = 'Enter'; k.classList.add('wide'); k.dataset.k = 'Enter'; }
+      else if (ch === '\b') { k.textContent = '⌫'; k.classList.add('wide'); k.dataset.k = 'Backspace'; }
+      else { k.textContent = ch.toUpperCase(); k.dataset.k = ch; }
+      k.onclick = () => press(k.dataset.k);
+      row.appendChild(k);
+    }
+    kb.appendChild(row);
+  });
+}
+
+function press(k) {
+  if (finished) return;
+  if (k === 'Enter') return submit();
+  if (k === 'Backspace') {
+    if (currentCol > 0) {
+      currentCol--;
+      document.getElementById(`t-${currentRow}-${currentCol}`).textContent = '';
+      document.getElementById(`t-${currentRow}-${currentCol}`).classList.remove('filled');
+    }
+    return;
+  }
+  if (/^[a-z]$/.test(k) && currentCol < COLS) {
+    const tile = document.getElementById(`t-${currentRow}-${currentCol}`);
+    tile.textContent = k;
+    tile.classList.add('filled');
+    currentCol++;
+  }
+}
+
+function submit() {
+  if (currentCol < COLS) { flash('not enough letters'); return; }
+  let guess = '';
+  for (let c = 0; c < COLS; c++) guess += document.getElementById(`t-${currentRow}-${c}`).textContent;
+  if (!WORDS.includes(guess)) { flash('not in word list'); return; }
+  // Score
+  const ans = answer.split('');
+  const result = Array(COLS).fill('absent');
+  for (let i = 0; i < COLS; i++) if (guess[i] === ans[i]) { result[i] = 'correct'; ans[i] = null; }
+  for (let i = 0; i < COLS; i++) if (result[i] === 'absent') {
+    const idx = ans.indexOf(guess[i]);
+    if (idx !== -1) { result[i] = 'present'; ans[idx] = null; }
+  }
+  for (let i = 0; i < COLS; i++) {
+    const tile = document.getElementById(`t-${currentRow}-${i}`);
+    tile.classList.add(result[i]);
+    const key = document.querySelector(`.key[data-k="${guess[i]}"]`);
+    if (key) {
+      // Promote correct > present > absent (don't downgrade)
+      if (result[i] === 'correct') key.className = 'key correct';
+      else if (result[i] === 'present' && !key.classList.contains('correct')) key.className = 'key present';
+      else if (result[i] === 'absent' && !key.classList.contains('correct') && !key.classList.contains('present')) key.className = 'key absent';
+    }
+  }
+  if (guess === answer) { finished = true; flash('Got it!'); return; }
+  currentRow++; currentCol = 0;
+  if (currentRow === ROWS) { finished = true; flash('The word was: ' + answer.toUpperCase()); }
+}
+
+function flash(s) { document.getElementById('msg').textContent = s; }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { press('Enter'); e.preventDefault(); }
+  else if (e.key === 'Backspace') { press('Backspace'); e.preventDefault(); }
+  else if (/^[a-zA-Z]$/.test(e.key)) press(e.key.toLowerCase());
+});
+
+init();
+</script>
+</body>
+</html>
