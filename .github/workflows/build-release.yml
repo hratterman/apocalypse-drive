@@ -43,6 +43,50 @@ jobs:
           test -d "dist/Apocalypse.app" || (echo ".app missing"; exit 1)
           ls -la dist/Apocalypse.app/Contents/MacOS/
 
+      # ── Code signing + notarization ──────────────────────────────────────
+      - name: Import Developer ID certificate
+        env:
+          CERTIFICATES_P12: ${{ secrets.CERTIFICATES_P12 }}
+          CERTIFICATES_P12_PASSWORD: ${{ secrets.CERTIFICATES_P12_PASSWORD }}
+        run: |
+          # Write cert to disk
+          echo "$CERTIFICATES_P12" | base64 --decode > /tmp/cert.p12
+
+          # Create a temporary keychain so we don't touch the login keychain
+          KEYCHAIN_PATH=/tmp/build.keychain
+          KEYCHAIN_PASSWORD=ci-temp-password
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import the cert
+          security import /tmp/cert.p12 \
+            -k "$KEYCHAIN_PATH" \
+            -P "$CERTIFICATES_P12_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain
+
+          # Allow codesign to use the key without a UI prompt
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          rm /tmp/cert.p12
+
+      - name: Sign .app
+        run: |
+          codesign \
+            --force \
+            --deep \
+            --options runtime \
+            --sign "Developer ID Application: Henry Ratterman (KUZ4AUL5D9)" \
+            --timestamp \
+            dist/Apocalypse.app
+          # Verify
+          codesign --verify --verbose=2 dist/Apocalypse.app
+          spctl --assess --verbose=2 --type execute dist/Apocalypse.app || true
+
       - name: Install create-dmg
         run: brew install create-dmg
 
@@ -63,6 +107,26 @@ jobs:
             "dist/Apocalypse.app" \
             || true   # create-dmg sometimes returns non-zero on success
           ls -la release/
+
+      - name: Notarize DMG
+        env:
+          NOTARIZATION_APPLE_ID: ${{ secrets.NOTARIZATION_APPLE_ID }}
+          NOTARIZATION_PASSWORD: ${{ secrets.NOTARIZATION_PASSWORD }}
+          NOTARIZATION_TEAM_ID: ${{ secrets.NOTARIZATION_TEAM_ID }}
+        run: |
+          # Submit to Apple notary service
+          xcrun notarytool submit release/Apocalypse-macOS.dmg \
+            --apple-id "$NOTARIZATION_APPLE_ID" \
+            --password "$NOTARIZATION_PASSWORD" \
+            --team-id "$NOTARIZATION_TEAM_ID" \
+            --wait \
+            --timeout 600
+
+          # Staple the notarization ticket to the DMG so it works offline
+          xcrun stapler staple release/Apocalypse-macOS.dmg
+
+          # Confirm staple worked
+          xcrun stapler validate release/Apocalypse-macOS.dmg
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -255,7 +319,6 @@ jobs:
           Windows:
             1. Open the windows/ folder
             2. Run Apocalypse-Setup.exe
-            3. When prompted, install to the drive root
 
           Linux:
             1. Open the linux/ folder
@@ -344,7 +407,7 @@ jobs:
 
             ### Downloads
             - **All-in-one (recommended for portable drives)**: `apocalypse-drive.zip` contains all three OS launchers plus the runtime layout. Drop on any exFAT drive, run it from any computer.
-            - **macOS only**: `Apocalypse-macOS.dmg` (Intel + Apple Silicon)
+            - **macOS only**: `Apocalypse-macOS.dmg` (Intel + Apple Silicon) — signed and notarized, no Gatekeeper warnings
             - **Windows only**: `Apocalypse-Windows-Setup.exe`
             - **Linux only**: `Apocalypse-Linux-x86_64.tar.gz`
 
@@ -352,7 +415,7 @@ jobs:
             Open the app. The setup wizard pops up in your browser. Step 1 picks the drive (internal or external). Step 2 picks a starter pack. Step 3 picks individual ZIMs. Step 4 downloads. When it finishes you have an offline copy of Wikipedia, Khan Academy, Stack Overflow, and more, plus an optional local LLM that grounds answers in those ZIMs.
 
             ### Notes
-            - macOS: first launch hits Gatekeeper. Right-click the app, choose Open, confirm. Once.
+            - macOS: fully signed and notarized — just double-click and run. No Gatekeeper prompts.
             - Windows: SmartScreen may warn. Click "More info" then "Run anyway".
             - Linux: untar and run `./Apocalypse/Apocalypse`.
             - Cross-OS portability: format the destination drive exFAT, drop the unzipped folder onto its root, and the same drive works on macOS, Windows, and Linux machines.
