@@ -671,16 +671,8 @@ def _read_landing_page():
 
 # --- Dispatch ---------------------------------------------------------------
 
-def dispatch_get(path, qs, headers=None):
-    """Handle a GET against the wizard / api / static / games / maps surface.
-
-    Returns (status, headers, body_bytes) or None if not handled.
-
-    `headers` is an optional dict of inbound HTTP headers (lowercased). The
-    map serving endpoint inspects Range so MapLibre/PMTiles can stream
-    partial reads from large local .pmtiles files.
-    """
-    headers = headers or {}
+def dispatch_get(path, qs):
+    """Returns (status, headers, body_bytes) or None if not handled."""
     if not is_initialized():
         return None
 
@@ -757,127 +749,6 @@ def dispatch_get(path, qs, headers=None):
             except Exception:
                 continue
         return 404, [('Content-Type', 'text/plain')], b'not found'
-
-    # --- Maps (PMTiles viewer + tile server) -------------------------------
-    if path == '/maps' or path == '/maps/' or path == '/maps/index.html':
-        candidates = [
-            _resource_root() / 'bin' / 'templates' / 'maps.html',
-            Path(__file__).resolve().parent / 'templates' / 'maps.html',
-        ]
-        for cand in candidates:
-            try:
-                if cand.exists() and cand.is_file():
-                    return 200, [('Content-Type', 'text/html; charset=utf-8')], cand.read_bytes()
-            except Exception:
-                continue
-        return 404, [('Content-Type', 'text/plain')], b'maps viewer not bundled'
-
-    if path == '/api/maps/list':
-        # List .pmtiles files in resources/maps/. Tries the install dir first
-        # (where the user drops their own files), then falls back to the
-        # bundled samples directory.
-        out = []
-        seen_names = set()
-        # User-installed maps live under install_dir/resources/maps
-        maps_dirs = [
-            _INSTALL_DIR / 'resources' / 'maps',
-            _resource_root() / 'resources' / 'maps',
-            Path(__file__).resolve().parent.parent / 'resources' / 'maps',  # source-mode
-        ]
-        for d in maps_dirs:
-            try:
-                if not d.exists() or not d.is_dir():
-                    continue
-                for f in d.iterdir():
-                    if f.name.startswith('._'):  # AppleDouble
-                        continue
-                    if f.suffix.lower() != '.pmtiles':
-                        continue
-                    if f.name in seen_names:
-                        continue
-                    seen_names.add(f.name)
-                    try:
-                        size = f.stat().st_size
-                    except Exception:
-                        size = 0
-                    out.append({
-                        'name': f.name,
-                        'size': size,
-                        'source': 'user' if d == maps_dirs[0] else 'bundled',
-                    })
-            except Exception:
-                continue
-        out.sort(key=lambda x: (x['source'] == 'user' and 0 or 1, x['name']))
-        return _json_response({'maps': out})
-
-    if path.startswith('/maps/file/'):
-        # Serve a .pmtiles file with Range support so MapLibre can stream
-        # partial reads. PMTiles JS aggressively requests byte ranges as it
-        # navigates, so this MUST honor Range or maps don't render.
-        rel = path[len('/maps/file/'):]
-        # Hard guard: only allow filenames, no slashes, no traversal.
-        if not rel or '/' in rel or '..' in rel or '\\' in rel:
-            return 404, [('Content-Type', 'text/plain')], b'not found'
-        if not rel.lower().endswith('.pmtiles'):
-            return 404, [('Content-Type', 'text/plain')], b'not found'
-        candidates = [
-            _INSTALL_DIR / 'resources' / 'maps' / rel,
-            _resource_root() / 'resources' / 'maps' / rel,
-            Path(__file__).resolve().parent.parent / 'resources' / 'maps' / rel,
-        ]
-        target = None
-        for cand in candidates:
-            try:
-                if cand.exists() and cand.is_file():
-                    target = cand
-                    break
-            except Exception:
-                continue
-        if target is None:
-            return 404, [('Content-Type', 'text/plain')], b'pmtiles not found'
-        total = target.stat().st_size
-        range_header = headers.get('range', '')
-        # Default: full file (rare, since PMTiles JS always uses ranges)
-        if not range_header.startswith('bytes='):
-            try:
-                with open(target, 'rb') as fh:
-                    body = fh.read()
-                return 200, [
-                    ('Content-Type', 'application/octet-stream'),
-                    ('Accept-Ranges', 'bytes'),
-                    ('Cache-Control', 'public, max-age=3600'),
-                ], body
-            except Exception as e:
-                return 500, [('Content-Type', 'text/plain')], str(e).encode('utf-8')
-        # Parse "bytes=START-END" (END is optional, inclusive)
-        try:
-            spec = range_header[len('bytes='):].split(',')[0].strip()
-            start_str, _, end_str = spec.partition('-')
-            start = int(start_str) if start_str else 0
-            end = int(end_str) if end_str else total - 1
-            if start < 0 or end < start or start >= total:
-                return 416, [
-                    ('Content-Range', f'bytes */{total}'),
-                    ('Content-Type', 'text/plain'),
-                ], b'range not satisfiable'
-            if end >= total:
-                end = total - 1
-            length = end - start + 1
-            with open(target, 'rb') as fh:
-                fh.seek(start)
-                body = fh.read(length)
-            return 206, [
-                ('Content-Type', 'application/octet-stream'),
-                ('Content-Range', f'bytes {start}-{end}/{total}'),
-                ('Accept-Ranges', 'bytes'),
-                ('Cache-Control', 'public, max-age=3600'),
-            ], body
-        except ValueError:
-            return 416, [
-                ('Content-Range', f'bytes */{total}'),
-                ('Content-Type', 'text/plain'),
-            ], b'malformed range'
-
     if path == '/' or path == '/index.html':
         # First-run UX: if setup hasn't been completed yet, redirect to the
         # wizard. Otherwise serve the polished Apocalypse.html landing page
