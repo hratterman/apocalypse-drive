@@ -40,6 +40,7 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.request
@@ -271,7 +272,15 @@ class ShimManager:
         self.port = port
         self.process = None
         self.log_path = self.install_dir / 'logs' / 'shim.log'
-        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        except (OSError, PermissionError) as e:
+            # install_dir may point to a stale/missing drive (e.g. pointer file
+            # still says /Volumes/Untitled but drive is now /Volumes/ApocaDrive 1).
+            # Fall back to a temp log so the app can still start and show the
+            # setup wizard, rather than crashing on launch.
+            _llog(f"ShimManager: log dir mkdir failed ({e}), falling back to temp log")
+            self.log_path = Path(tempfile.gettempdir()) / 'apocalypse_shim.log'
 
     def is_running(self):
         return self.process is not None and self.process.poll() is None
@@ -1046,6 +1055,27 @@ if __name__ == '__main__':
         sys.exit(0)
 
     _llog("constructing ApocalypseApp")
+
+    # Self-heal: if this binary is running from inside an apocalypse-drive
+    # folder on an external drive, update the pointer file to match. This
+    # fixes the "pointer still says /Volumes/Untitled" bug when the drive
+    # was renamed or remounted with a different suffix.
+    try:
+        exe_path = Path(sys.argv[0]).resolve()
+        # .app on macOS: .../apocalypse-drive/macos/Apocalypse.app/Contents/MacOS/Apocalypse
+        # Look for the apocalypse data dir relative to the .app location
+        for parent in exe_path.parents:
+            candidate = parent.parent / 'apocalypse'
+            if (candidate / 'state.json').exists() or (candidate / 'kiwix').exists():
+                pointer = Path.home() / '.apocalypse_install'
+                current = pointer.read_text(encoding='utf-8').strip() if pointer.exists() else ''
+                if str(candidate) != current:
+                    pointer.write_text(str(candidate) + '\n', encoding='utf-8')
+                    _llog(f"self-healed pointer: {current!r} -> {candidate}")
+                break
+    except Exception as e:
+        _llog(f"self-heal pointer: skipped ({e})")
+
     app = None
     rumps_app = None
     try:
