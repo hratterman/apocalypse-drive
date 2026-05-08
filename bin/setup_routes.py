@@ -231,6 +231,9 @@ def installed_zim_files():
         return []
     out = []
     for f in zim_dir.iterdir():
+        # Skip macOS AppleDouble sidecars (._filename) created on exFAT.
+        if f.name.startswith('._'):
+            continue
         if f.suffix == '.zim' and f.stat().st_size > 0:
             out.append((f.stem, str(f)))
     return out
@@ -561,6 +564,9 @@ def remove_installed(item_id):
     zim_dir = _INSTALL_DIR / 'kiwix' / 'zim'
     removed_any = False
     for f in zim_dir.iterdir():
+        # Skip macOS AppleDouble sidecars.
+        if f.name.startswith('._'):
+            continue
         if f.suffix == '.zim' and f.stem.startswith(prefix):
             try:
                 f.unlink()

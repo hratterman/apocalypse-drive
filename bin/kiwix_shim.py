@@ -47,6 +47,9 @@ def load_archives(zim_dir):
     """Open every .zim in zim_dir and key by filename-without-extension."""
     archives = {}
     for fn in sorted(os.listdir(zim_dir)):
+        # Skip macOS AppleDouble sidecars (._filename) created on exFAT.
+        if fn.startswith('._'):
+            continue
         if not fn.endswith('.zim'):
             continue
         path = os.path.join(zim_dir, fn)

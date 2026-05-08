@@ -470,8 +470,15 @@ class LlamaServerManager:
         self._check_relocation()
         if not self.llm_dir.exists():
             return None
-        candidates = sorted(self.llm_dir.glob('*.llamafile')) + \
-                     sorted(self.llm_dir.glob('*.gguf'))
+        # Filter out macOS AppleDouble sidecars (._filename). These are HFS
+        # metadata stubs created when copying to exFAT/FAT32. They match
+        # *.llamafile globs but are tiny binary blobs that crash /bin/sh
+        # with "cannot execute binary file" if we try to run them.
+        candidates = sorted(
+            f for f in (list(self.llm_dir.glob('*.llamafile')) +
+                        list(self.llm_dir.glob('*.gguf')))
+            if not f.name.startswith('._')
+        )
         if not candidates:
             return None
         # Heuristic: pick the largest model the system can probably run.
