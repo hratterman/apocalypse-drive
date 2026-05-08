@@ -85,7 +85,7 @@ jobs:
             --force \
             --deep \
             --options runtime \
-            --sign "Developer ID Application: Henry Ratterman (KUZ4AUL5D9)" \
+            --sign "Developer ID Application: HENRY WILLIAM RATTERMAN (KUZ4AUL5D9)" \
             --timestamp \
             dist/Apocalypse.app
           # Verify
