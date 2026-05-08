@@ -869,6 +869,7 @@
 <a id="kiwixLink" href="/library">[ browse library ]</a>
 <a id="llamaLink" href="/chat">[ raw llm chat ]</a>
 <a id="gamesLink" href="/games">[ games ]</a>
+<a id="mapsLink" href="/maps">[ maps ]</a>
   </div>
 
   <div id="err" class="err" style="display:none"></div>
@@ -1046,10 +1047,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const k = document.getElementById('kiwixLink');
     const l = document.getElementById('llamaLink');
     const g = document.getElementById('gamesLink');
+    const m = document.getElementById('mapsLink');
     const isFileProto = window.location.protocol === 'file:';
     if (k && isFileProto) k.href = KIWIX + '/library';
     if (l && isFileProto) l.href = KIWIX + '/chat';
     if (g && isFileProto) g.href = KIWIX + '/games';
+    if (m && isFileProto) m.href = KIWIX + '/maps';
   });
 });
 

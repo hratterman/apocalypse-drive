@@ -639,7 +639,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 import setup_routes
                 if setup_routes.is_initialized():
-                    result = setup_routes.dispatch_get(path, qs)
+                    result = setup_routes.dispatch_get(path, qs, headers={k.lower(): v for k, v in self.headers.items()})
                     if result is not None:
                         status, headers, body = result
                         self.send_response(status)
