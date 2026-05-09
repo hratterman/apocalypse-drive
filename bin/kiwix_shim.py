@@ -279,8 +279,18 @@ def llm_complete(system, user, max_tokens=300, temperature=0.2, timeout=60):
                     pass  # fall through to cloud
 
     # 2. Groq fallback (demo / remote access)
+    # Use 8b-instant as primary -- 144k effective RPM, never rate-limits in practice.
+    # Fall back to 70b-versatile if 8b fails (e.g. content policy, model error).
     groq_key = os.environ.get('GROQ_API_KEY', '').strip()
     if groq_key:
+        try:
+            return _call(
+                'https://api.groq.com/openai',
+                'llama-3.1-8b-instant',
+                api_key=groq_key,
+            )
+        except Exception:
+            pass
         return _call(
             'https://api.groq.com/openai',
             'llama-3.3-70b-versatile',
