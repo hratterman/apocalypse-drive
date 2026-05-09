@@ -671,10 +671,37 @@ def _read_landing_page():
 
 # --- Dispatch ---------------------------------------------------------------
 
-def dispatch_get(path, qs):
+_LOCAL_ADDRS = {'127.0.0.1', '::1', 'localhost'}
+
+def _is_local(client_ip):
+    """Return True if the request came from localhost."""
+    return (client_ip or '').split(':')[0] in _LOCAL_ADDRS
+
+_ADMIN_PATHS = {
+    '/admin', '/setup',
+    '/api/download/start', '/api/download/start_url',
+    '/api/download/cancel', '/api/download/retry',
+    '/api/download/clear', '/api/download/remove',
+    '/api/download/progress',
+    '/api/config', '/api/setup/complete',
+    '/api/services/restart', '/api/install-dir',
+    '/api/drives', '/api/browse',
+}
+
+def _remote_block():
+    """403 response for requests that must stay local."""
+    body = b'{"error":"admin access restricted to localhost"}'
+    return 403, [('Content-Type', 'application/json')], body
+
+
+def dispatch_get(path, qs, client_ip=None):
     """Returns (status, headers, body_bytes) or None if not handled."""
     if not is_initialized():
         return None
+
+    # Block admin/setup/destructive routes from remote clients
+    if path in _ADMIN_PATHS and not _is_local(client_ip):
+        return _remote_block()
 
     if path == '/setup':
         body = _read_template('setup.html').encode('utf-8')
@@ -842,9 +869,13 @@ def dispatch_get(path, qs):
     return None
 
 
-def dispatch_post(path, body):
+def dispatch_post(path, body, client_ip=None):
     if not is_initialized():
         return None
+
+    # Block all POST admin/destructive routes from remote clients
+    if path in _ADMIN_PATHS and not _is_local(client_ip):
+        return _remote_block()
 
     if path == '/api/download/start':
         ids = body.get('ids', [])

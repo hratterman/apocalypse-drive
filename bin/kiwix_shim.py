@@ -114,8 +114,8 @@ def resolve_exact_title(archive, query):
         # Wikipedia title formats to try, in order of likelihood
         underscored = prefix.replace(' ', '_')
         candidates = [
-            underscored,                                  # exact, raw
-            underscored.capitalize(),                     # First-letter cap
+            underscored,                                  # exact, raw (works for WikEM, Appropedia, etc.)
+            underscored.capitalize(),
             '_'.join(w.capitalize() for w in words[:end]), # Title Case
             f"A/{underscored}",
             f"A/{underscored.capitalize()}",
@@ -227,45 +227,67 @@ Examples:
 
 
 def llm_complete(system, user, max_tokens=300, temperature=0.2, timeout=60):
-    """Call the local llamafile chat endpoint, return the assistant text."""
+    """Call the LLM chat endpoint, return the assistant text.
+
+    Priority:
+      1. Local llamafile/llama-server if one is detected on a candidate port.
+      2. Groq cloud API (llama-3.3-70b-versatile) if GROQ_API_KEY is set.
+
+    Groq is used as a seamless fallback so the demo site works without a
+    locally-running model. On a real offline drive, only option 1 is available.
+    """
     import urllib.request as _ur
+
+    def _call(url, model, api_key=None, body_extra=None):
+        body = {
+            'model': model,
+            'messages': [
+                {'role': 'system', 'content': system},
+                {'role': 'user', 'content': user},
+            ],
+            'temperature': temperature,
+            'max_tokens': max_tokens,
+        }
+        if body_extra:
+            body.update(body_extra)
+        headers = {'Content-Type': 'application/json', 'User-Agent': 'Apocalypse/1.5.9'}
+        if api_key:
+            headers['Authorization'] = f'Bearer {api_key}'
+        req = _ur.Request(
+            f'{url}/v1/chat/completions',
+            data=json.dumps(body).encode(),
+            headers=headers,
+        )
+        with _ur.urlopen(req, timeout=timeout) as r:
+            resp = json.loads(r.read())
+        text = resp['choices'][0]['message']['content']
+        text = text.replace('<|eot_id|>', '').strip()
+        return text
+
+    # 1. Try local LLM first
     url = _detect_llm_url()
-    if not url:
-        raise ConnectionError('No LLM detected on any candidate port')
-    body = {
-        'model': 'local',
-        'messages': [
-            {'role': 'system', 'content': system},
-            {'role': 'user', 'content': user},
-        ],
-        'temperature': temperature,
-        'max_tokens': max_tokens,
-    }
-    try:
-        req = _ur.Request(
-            f'{url}/v1/chat/completions',
-            data=json.dumps(body).encode(),
-            headers={'Content-Type': 'application/json'},
+    if url:
+        try:
+            return _call(url, 'local')
+        except (ConnectionError, OSError):
+            # Cached URL stale -- re-probe once
+            url = _detect_llm_url(force=True)
+            if url:
+                try:
+                    return _call(url, 'local')
+                except Exception:
+                    pass  # fall through to cloud
+
+    # 2. Groq fallback (demo / remote access)
+    groq_key = os.environ.get('GROQ_API_KEY', '').strip()
+    if groq_key:
+        return _call(
+            'https://api.groq.com/openai',
+            'llama-3.3-70b-versatile',
+            api_key=groq_key,
         )
-        with _ur.urlopen(req, timeout=timeout) as r:
-            resp = json.loads(r.read())
-    except (ConnectionError, OSError):
-        # Cached URL stale (LLM moved to a different port mid-session).
-        # Force re-probe and try once more.
-        url = _detect_llm_url(force=True)
-        if not url:
-            raise
-        req = _ur.Request(
-            f'{url}/v1/chat/completions',
-            data=json.dumps(body).encode(),
-            headers={'Content-Type': 'application/json'},
-        )
-        with _ur.urlopen(req, timeout=timeout) as r:
-            resp = json.loads(r.read())
-    text = resp['choices'][0]['message']['content']
-    # Strip llama 3.x EOT marker
-    text = text.replace('<|eot_id|>', '').strip()
-    return text
+
+    raise ConnectionError('No LLM detected on any candidate port')
 
 
 def predict_titles(question):
@@ -372,7 +394,10 @@ def gather_candidates(question, max_candidates=6):
     3. ALSO run keyword search on cleaned question (catch cases LLM missed)
     4. Deduplicate by (book, resolved_path)
     """
-    # Pick Wikipedia-family books in priority order
+    # Pick books in priority order.
+    # Tier 1: Wikipedia family (broad knowledge base)
+    # Tier 2: Medical/survival reference (high-value specialty ZIMs)
+    # Tier 3: Everything else
     wiki_books = []
     for prefix in ('wikipedia_en_all', 'wikipedia_en_medicine',
                    'wikipedia_', 'wikimed', 'wikivoyage', 'wikibooks',
@@ -380,15 +405,29 @@ def gather_candidates(question, max_candidates=6):
         for k in ARCHIVES:
             if k.startswith(prefix) and k not in wiki_books:
                 wiki_books.append(k)
-    other_books = [k for k in ARCHIVES if k not in wiki_books]
+    # Medical/survival ZIMs always searched alongside Wikipedia
+    medical_prefixes = (
+        'wikem_', 'wikem_en',
+        'fas-military-medicine', 'irp.fas.org_en_military-medicine',
+        'libretexts.org_en_med',
+        'appropedia_', 'lrnselfreliance_',
+        'armypubs_', 'zimgit-medicine', 'zimgit-post-disaster',
+    )
+    medical_books = []
+    for prefix in medical_prefixes:
+        for k in ARCHIVES:
+            if k.startswith(prefix) and k not in wiki_books and k not in medical_books:
+                medical_books.append(k)
+    priority_books = wiki_books + medical_books
+    other_books = [k for k in ARCHIVES if k not in priority_books]
 
     candidates = []
     seen = set()  # (book, path)
 
-    # Stage 1: LLM-predicted titles, resolved against Wikipedia books
+    # Stage 1: LLM-predicted titles, resolved against priority books (Wikipedia + medical)
     titles = predict_titles(question)
     for title in titles:
-        for book in wiki_books:
+        for book in priority_books:
             archive = ARCHIVES.get(book)
             if not archive:
                 continue
@@ -407,21 +446,22 @@ def gather_candidates(question, max_candidates=6):
         if len(candidates) >= max_candidates:
             break
 
-    # Stage 2: Keyword search as a backup (catches things the LLM missed)
-    # Only runs if we have fewer than 3 LLM-resolved candidates
+    # Stage 2: Keyword search.
+    # Always runs for medical_books (WikEM/army pubs should appear alongside Wikipedia).
+    # Runs for all priority books when we have fewer than 3 LLM candidates.
     if len(candidates) < 3:
+        stage2_books = (wiki_books[:2] + medical_books) if (wiki_books or medical_books) else other_books[:5]
+    else:
+        stage2_books = medical_books  # always include medical even when wiki filled slots
+
+    if stage2_books:
         # Strip stop words for the keyword search
         stop = r'\b(how|do|does|did|the|a|an|of|to|i|me|my|you|your|what|when|where|why|tell|about|please|is|are|was|were|can|could|should|would|who)\b'
         cleaned = re.sub(stop, ' ', question.lower())
         cleaned = re.sub(r'[?!.,;:]', ' ', cleaned)
         cleaned = re.sub(r'\s+', ' ', cleaned).strip() or question
 
-        # If no Wikipedia-family ZIMs are installed (small library, niche
-        # corpus, etc.), fall through to the other books rather than returning
-        # "no results" while a perfectly searchable ZIM sits idle.
-        search_books = wiki_books[:2] if wiki_books else other_books[:5]
-
-        for book in search_books:
+        for book in stage2_books:
             archive = ARCHIVES.get(book)
             if not archive:
                 continue
@@ -639,7 +679,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 import setup_routes
                 if setup_routes.is_initialized():
-                    result = setup_routes.dispatch_get(path, qs)
+                    client_ip = self.client_address[0] if self.client_address else None
+                    result = setup_routes.dispatch_get(path, qs, client_ip=client_ip)
                     if result is not None:
                         status, headers, body = result
                         self.send_response(status)
@@ -716,7 +757,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 import setup_routes
                 if setup_routes.is_initialized():
-                    result = setup_routes.dispatch_post(path, body)
+                    client_ip = self.client_address[0] if self.client_address else None
+                    result = setup_routes.dispatch_post(path, body, client_ip=client_ip)
                     if result is not None:
                         status, headers, body_out = result
                         self.send_response(status)

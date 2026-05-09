@@ -522,6 +522,71 @@
       "size_bytes": 324052992,
       "article_count": 38093,
       "download_url": "https://download.kiwix.org/zim/wikinews/wikinews_en_all_maxi_2026-04.zim"
+    },
+    {
+      "id": "wikem",
+      "category": "Medical & Survival",
+      "title": "WikEM Emergency Medicine",
+      "subtitle": "Emergency medicine reference",
+      "description": "Comprehensive emergency medicine wiki. Drug dosing, clinical protocols, trauma care, toxicology. Written by EM physicians.",
+      "essential": true,
+      "kiwix_name": "wikem_en_all",
+      "kiwix_flavour": "maxi",
+      "size_bytes": 48676248,
+      "article_count": 5000,
+      "download_url": "https://download.kiwix.org/zim/other/wikem_en_all_maxi_2026-04.zim"
+    },
+    {
+      "id": "appropedia",
+      "category": "Medical & Survival",
+      "title": "Appropedia",
+      "subtitle": "Practical sustainable tech",
+      "description": "Sustainability, appropriate technology, and development guides. Water systems, sanitation, renewable energy, low-cost construction.",
+      "essential": false,
+      "kiwix_name": "appropedia_en_all",
+      "kiwix_flavour": "maxi",
+      "size_bytes": 581641351,
+      "article_count": 9000,
+      "download_url": "https://download.kiwix.org/zim/other/appropedia_en_all_maxi_2026-02.zim"
+    },
+    {
+      "id": "military_medicine_fas",
+      "category": "Medical & Survival",
+      "title": "Military Medicine (FAS)",
+      "subtitle": "Combat and field medicine",
+      "description": "Federation of American Scientists archive of military medicine manuals: trauma care, field surgery, triage, chemical and radiation injuries.",
+      "essential": false,
+      "kiwix_name": "fas-military-medicine_en",
+      "kiwix_flavour": "",
+      "size_bytes": 82000000,
+      "article_count": 500,
+      "download_url": "https://download.kiwix.org/zim/zimit/fas-military-medicine_en_2025-06.zim"
+    },
+    {
+      "id": "military_medicine_irp",
+      "category": "Medical & Survival",
+      "title": "Military Medicine (IRP)",
+      "subtitle": "Intelligence resource program field medicine",
+      "description": "IRP.FAS.org military medicine archive. Tactical combat casualty care, operational medicine, field surgical guides.",
+      "essential": false,
+      "kiwix_name": "irp.fas.org_en_military-medicine",
+      "kiwix_flavour": "",
+      "size_bytes": 80000000,
+      "article_count": 400,
+      "download_url": "https://download.kiwix.org/zim/zimit/irp.fas.org_en_military-medicine_2026-05.zim"
+    },
+    {
+      "id": "libretexts_medicine",
+      "category": "Medical & Survival",
+      "title": "Medicine LibreTexts",
+      "subtitle": "Open-access medical textbooks",
+      "description": "College-level medical textbooks covering anatomy, pharmacology, clinical skills, nursing, and allied health. Open access and peer-reviewed.",
+      "essential": false,
+      "kiwix_name": "libretexts.org_en_med",
+      "kiwix_flavour": "",
+      "size_bytes": 1190000000,
+      "article_count": 15000,
+      "download_url": "https://download.kiwix.org/zim/libretexts/libretexts.org_en_med_2025-01.zim"
     }
   ],
   "bundles": {
