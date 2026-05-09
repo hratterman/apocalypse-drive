@@ -680,7 +680,7 @@ def _is_local(client_ip, headers=None):
     enough. Cloudflare always injects CF-Connecting-IP on tunnelled requests.
     If that header is present the request is remote even if the socket is local.
     """
-    if headers and headers.get('CF-Connecting-IP'):
+    if headers and headers.get('Cf-Connecting-Ip'):
         return False  # came through Cloudflare tunnel = remote visitor
     return (client_ip or '').split(':')[0] in _LOCAL_ADDRS
 
