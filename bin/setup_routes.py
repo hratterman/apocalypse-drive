@@ -60,6 +60,39 @@ _ZIM_DIR_RELOCATE_HOOK = None  # callable(new_zim_dir): updates kiwix_shim.ZIM_D
 _RELOAD_TIMER = None       # debounce timer for shim reloads
 _RELOAD_LOCK = threading.Lock()
 
+# --- Rate limiting (LLM endpoints) ------------------------------------------
+# Token bucket: 20 requests/minute per IP, burst up to 5.
+# No external deps -- pure stdlib.
+
+_RL_LOCK = threading.Lock()
+_RL_BUCKETS = {}   # ip -> {'tokens': float, 'last': float}
+_RL_RATE = 20 / 60.0   # tokens per second
+_RL_BURST = 5          # max bucket size
+_RL_PATHS = {'/answer', '/api/chat'}  # endpoints that call Groq
+
+def _rate_limited(ip: str) -> bool:
+    """Return True if this IP has exceeded the rate limit (request should be blocked)."""
+    now = time.monotonic()
+    with _RL_LOCK:
+        # Evict stale buckets every ~1000 requests to avoid unbounded growth
+        if len(_RL_BUCKETS) > 1000:
+            cutoff = now - 120
+            stale = [k for k, v in _RL_BUCKETS.items() if v['last'] < cutoff]
+            for k in stale:
+                del _RL_BUCKETS[k]
+        b = _RL_BUCKETS.get(ip)
+        if b is None:
+            _RL_BUCKETS[ip] = {'tokens': _RL_BURST - 1, 'last': now}
+            return False
+        # Refill
+        elapsed = now - b['last']
+        b['tokens'] = min(_RL_BURST, b['tokens'] + elapsed * _RL_RATE)
+        b['last'] = now
+        if b['tokens'] >= 1:
+            b['tokens'] -= 1
+            return False
+        return True
+
 
 def _schedule_shim_reload(delay=2.0):
     """Schedule a shim ZIM reload, debounced.
@@ -695,6 +728,9 @@ _ADMIN_PATHS = {
     '/api/drives', '/api/browse',
 }
 
+# Public paths that hit Groq -- rate limited but not admin-blocked
+_LLM_PATHS = {'/answer', '/api/chat'}
+
 def _remote_block():
     """403 response for requests that must stay local."""
     body = b'{"error":"admin access restricted to localhost"}'
@@ -709,6 +745,11 @@ def dispatch_get(path, qs, client_ip=None, headers=None):
     # Block admin/setup/destructive routes from remote clients
     if path in _ADMIN_PATHS and not _is_local(client_ip, headers):
         return _remote_block()
+
+    # Rate-limit LLM endpoints (Groq proxy abuse prevention)
+    if path in _LLM_PATHS and _rate_limited(client_ip or ''):
+        body = b'{"error":"rate limit exceeded, try again in a moment"}'
+        return 429, [('Content-Type', 'application/json')], body
 
     if path == '/setup':
         body = _read_template('setup.html').encode('utf-8')
@@ -840,8 +881,8 @@ def dispatch_get(path, qs, client_ip=None, headers=None):
         return _json_response(result)
     if path == '/api/status':
         st = load_state()
-        return _json_response({
-            'install_dir': str(_INSTALL_DIR),
+        is_local = _is_local(client_ip, headers)
+        resp = {
             'setup_complete': st.get('setup_complete', False),
             'installed_ids': installed_ids(),
             'theme': st.get('theme', 'terminal'),
@@ -850,10 +891,14 @@ def dispatch_get(path, qs, client_ip=None, headers=None):
             'version': _APP_VERSION,
             'author': 'Henry Ratterman',
             'author_url': 'https://henryratterman.com',
-        })
+        }
+        # Only expose local filesystem path to localhost
+        if is_local:
+            resp['install_dir'] = str(_INSTALL_DIR)
+        return _json_response(resp)
     if path == '/api/disk':
-        target = (qs.get('path') or [str(_INSTALL_DIR)])[0]
-        return _json_response(disk_for(target))
+        # Only allow probing the install dir itself -- no arbitrary path oracle
+        return _json_response(disk_for(_INSTALL_DIR))
     if path == '/api/drives':
         try:
             from drives import list_drives
@@ -883,6 +928,11 @@ def dispatch_post(path, body, client_ip=None, headers=None):
     # Block all POST admin/destructive routes from remote clients
     if path in _ADMIN_PATHS and not _is_local(client_ip, headers):
         return _remote_block()
+
+    # Rate-limit LLM endpoints (Groq proxy abuse prevention)
+    if path in _LLM_PATHS and _rate_limited(client_ip or ''):
+        body_out = b'{"error":"rate limit exceeded, try again in a moment"}'
+        return 429, [('Content-Type', 'application/json')], body_out
 
     if path == '/api/download/start':
         ids = body.get('ids', [])
