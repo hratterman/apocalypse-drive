@@ -690,7 +690,7 @@ class Handler(BaseHTTPRequestHandler):
                 import setup_routes
                 if setup_routes.is_initialized():
                     client_ip = self.client_address[0] if self.client_address else None
-                    result = setup_routes.dispatch_get(path, qs, client_ip=client_ip)
+                    result = setup_routes.dispatch_get(path, qs, client_ip=client_ip, headers=dict(self.headers))
                     if result is not None:
                         status, headers, body = result
                         self.send_response(status)
@@ -768,7 +768,7 @@ class Handler(BaseHTTPRequestHandler):
                 import setup_routes
                 if setup_routes.is_initialized():
                     client_ip = self.client_address[0] if self.client_address else None
-                    result = setup_routes.dispatch_post(path, body, client_ip=client_ip)
+                    result = setup_routes.dispatch_post(path, body, client_ip=client_ip, headers=dict(self.headers))
                     if result is not None:
                         status, headers, body_out = result
                         self.send_response(status)

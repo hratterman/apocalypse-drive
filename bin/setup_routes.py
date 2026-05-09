@@ -673,8 +673,15 @@ def _read_landing_page():
 
 _LOCAL_ADDRS = {'127.0.0.1', '::1', 'localhost'}
 
-def _is_local(client_ip):
-    """Return True if the request came from localhost."""
+def _is_local(client_ip, headers=None):
+    """Return True if the request is a direct local connection (not via Cloudflare tunnel).
+
+    cloudflared connects to the shim as 127.0.0.1, so socket IP alone is not
+    enough. Cloudflare always injects CF-Connecting-IP on tunnelled requests.
+    If that header is present the request is remote even if the socket is local.
+    """
+    if headers and headers.get('CF-Connecting-IP'):
+        return False  # came through Cloudflare tunnel = remote visitor
     return (client_ip or '').split(':')[0] in _LOCAL_ADDRS
 
 _ADMIN_PATHS = {
@@ -694,13 +701,13 @@ def _remote_block():
     return 403, [('Content-Type', 'application/json')], body
 
 
-def dispatch_get(path, qs, client_ip=None):
+def dispatch_get(path, qs, client_ip=None, headers=None):
     """Returns (status, headers, body_bytes) or None if not handled."""
     if not is_initialized():
         return None
 
     # Block admin/setup/destructive routes from remote clients
-    if path in _ADMIN_PATHS and not _is_local(client_ip):
+    if path in _ADMIN_PATHS and not _is_local(client_ip, headers):
         return _remote_block()
 
     if path == '/setup':
@@ -869,12 +876,12 @@ def dispatch_get(path, qs, client_ip=None):
     return None
 
 
-def dispatch_post(path, body, client_ip=None):
+def dispatch_post(path, body, client_ip=None, headers=None):
     if not is_initialized():
         return None
 
     # Block all POST admin/destructive routes from remote clients
-    if path in _ADMIN_PATHS and not _is_local(client_ip):
+    if path in _ADMIN_PATHS and not _is_local(client_ip, headers):
         return _remote_block()
 
     if path == '/api/download/start':
