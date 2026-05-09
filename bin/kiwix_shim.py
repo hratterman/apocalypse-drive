@@ -784,6 +784,8 @@ class Handler(BaseHTTPRequestHandler):
 
             if path == '/answer':
                 return self._answer(body)
+            if path == '/api/chat':
+                return self._chat(body)
             self._json(404, {"error": "not found", "path": path})
         except Exception as e:
             self._json(500, {"error": str(e), "type": type(e).__name__})
@@ -1211,6 +1213,53 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Length', str(len(content)))
         self.end_headers()
         self.wfile.write(content)
+
+    def _chat(self, body):
+        """Proxy chat completions to llm_complete (Groq or local LLM).
+
+        Accepts the same shape as /v1/chat/completions so the frontend can
+        point at /api/chat instead of localhost:808x.
+        Body: {messages: [{role, content}, ...], system?: str, max_tokens?: int}
+        """
+        messages = body.get('messages', [])
+        if not messages:
+            return self._json(400, {'error': "missing 'messages'"})
+
+        # Extract system prompt if present as first message, else use default
+        system = 'You are a helpful assistant running on an offline knowledge drive. Be direct and concise.'
+        user_messages = []
+        for m in messages:
+            if m.get('role') == 'system':
+                system = m.get('content', system)
+            else:
+                user_messages.append(m)
+
+        if not user_messages:
+            return self._json(400, {'error': 'no user messages'})
+
+        # Build a single user prompt from the conversation history
+        if len(user_messages) == 1:
+            user_prompt = user_messages[-1].get('content', '')
+        else:
+            # Multi-turn: format as a conversation string
+            turns = []
+            for m in user_messages:
+                role = m.get('role', 'user').upper()
+                turns.append(f"{role}: {m.get('content', '')}")
+            user_prompt = '\n'.join(turns)
+
+        try:
+            max_tokens = int(body.get('max_tokens', 1200))
+            answer = llm_complete(system, user_prompt, max_tokens=max_tokens, temperature=0.5)
+            return self._json(200, {
+                'choices': [{'message': {'role': 'assistant', 'content': answer}}],
+                'model': 'groq-proxy',
+            })
+        except Exception as e:
+            return self._json(200, {
+                'error': str(e),
+                'choices': [{'message': {'role': 'assistant', 'content': f'[LLM error: {e}]'}}],
+            })
 
     def _json(self, status, data):
         body = json.dumps(data).encode('utf-8')

@@ -231,7 +231,7 @@
     </div>
 
     <div class="chat-info">
-      <strong>Direct conversation with the local LLM.</strong> No retrieval, no ZIM context, no internet. Whatever's running on <code id="llmEndpoint">localhost:8081</code> is what answers. Use the home page if you want the LLM grounded in your offline encyclopedias instead.
+      <strong>Direct conversation with the LLM.</strong> No retrieval, no ZIM context. On the demo site this routes through Groq. On a local drive it talks directly to the local model running on <code id="llmEndpoint">detecting…</code>. Use the home page if you want the LLM grounded in your offline encyclopedias instead.
       <div class="chat-warn" id="chatWarn">! LLM offline. Either the local model isn't running, or "No model" was chosen during setup. Reopen the wizard to install one.</div>
     </div>
 
@@ -259,9 +259,13 @@
     const modelLabel = document.getElementById('modelLabel');
     const chatWarn = document.getElementById('chatWarn');
 
-    // Auto-detect LLM endpoint. Try common llamafile/llama-server ports.
+    // Chat routing:
+    // 1. Use the shim's /api/chat proxy (works on demo site via Groq, or locally via llamafile)
+    // 2. Fall back to direct localhost port detection (local install only)
     const LLM_CANDIDATES = ['8081', '8080', '8082', '8083', '18081'];
-    let LLM = null;
+    const PROXY_URL = window.location.origin + '/api/chat';
+    let LLM = null;      // set to localhost:port only if proxy unavailable
+    let USE_PROXY = false;
     let MODEL_NAME = 'local';
 
     function escapeHtml(s) {
@@ -280,6 +284,25 @@
     }
 
     async function detectLLM() {
+      // First: try the shim proxy (works on demo via Groq, and locally)
+      try {
+        const probe = await fetch(PROXY_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: [{ role: 'user', content: 'ping' }], max_tokens: 5 }),
+          signal: AbortSignal.timeout(5000),
+        });
+        if (probe.ok) {
+          USE_PROXY = true;
+          MODEL_NAME = 'groq / llama-3.1-8b';
+          modelLabel.textContent = `Model: ${MODEL_NAME}`;
+          document.getElementById('llmEndpoint').textContent = 'shim proxy';
+          chatWarn.style.display = 'none';
+          return true;
+        }
+      } catch (_) {}
+
+      // Second: try local llamafile/llama-server ports
       for (const p of LLM_CANDIDATES) {
         try {
           const r = await fetch(`http://localhost:${p}/v1/models`, { signal: AbortSignal.timeout(1500) });
@@ -330,10 +353,10 @@
     });
 
     async function sendMessage(text) {
-      if (!LLM) {
+      if (!USE_PROXY && !LLM) {
         const ok = await detectLLM();
         if (!ok) {
-          append('error', 'No LLM detected on ports 8080-8083 or 18081. Run the local model and try again.');
+          append('error', 'No LLM available. On the demo site the proxy should work automatically — try refreshing. For local install, run the local model and try again.');
           return;
         }
       }
@@ -346,70 +369,84 @@
       const respDiv = append('assistant', '');
 
       const messages = [
-        { role: 'system', content: 'You are a helpful assistant running on a local offline machine. Be direct and concise.' },
+        { role: 'system', content: 'You are a helpful assistant running on an offline knowledge drive. Be direct and concise.' },
         ...conversation,
       ];
 
       let answer = '';
       try {
-        const r = await fetch(LLM + '/v1/chat/completions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: MODEL_NAME,
-            messages,
-            stream: true,
-            temperature: 0.5,
-            max_tokens: 1200,
-            stop: ['<|eot_id|>', '<|end_of_text|>', '<|im_end|>', '<|endoftext|>'],
-          }),
-        });
-        if (!r.ok) throw new Error('HTTP ' + r.status);
+        if (USE_PROXY) {
+          // Non-streaming path: shim proxy returns full JSON response
+          const r = await fetch(PROXY_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messages, max_tokens: 1200 }),
+          });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const j = await r.json();
+          if (j.error) throw new Error(j.error);
+          answer = j.choices?.[0]?.message?.content || '';
+          respDiv.textContent = answer;
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        } else {
+          // Streaming path: direct local LLM
+          const r = await fetch(LLM + '/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: MODEL_NAME,
+              messages,
+              stream: true,
+              temperature: 0.5,
+              max_tokens: 1200,
+              stop: ['<|eot_id|>', '<|end_of_text|>', '<|im_end|>', '<|endoftext|>'],
+            }),
+          });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
 
-        const reader = r.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
+          const reader = r.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
 
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop();
-          for (const line of lines) {
-            if (!line.startsWith('data: ')) continue;
-            const data = line.slice(6).trim();
-            if (data === '[DONE]') break;
-            try {
-              const json = JSON.parse(data);
-              const delta = json.choices?.[0]?.delta?.content;
-              if (delta) {
-                answer += delta;
-                // Strip Llama / ChatML / GPT end-of-turn markers that some
-                // local servers emit as visible content before honoring the
-                // stop list. Keep this in sync with the stop array above.
-                const cleaned = answer
-                  .replace(/<\|eot_id\|>/g, '')
-                  .replace(/<\|end_of_text\|>/g, '')
-                  .replace(/<\|im_end\|>/g, '')
-                  .replace(/<\|endoftext\|>/g, '')
-                  .replace(/<\|start_header_id\|>.*?<\|end_header_id\|>/gs, '')
-                  .trimEnd();
-                respDiv.textContent = cleaned;
-                messagesEl.scrollTop = messagesEl.scrollHeight;
-              }
-            } catch (_) {}
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              const data = line.slice(6).trim();
+              if (data === '[DONE]') break;
+              try {
+                const json = JSON.parse(data);
+                const delta = json.choices?.[0]?.delta?.content;
+                if (delta) {
+                  answer += delta;
+                  const cleaned = answer
+                    .replace(/<\|eot_id\|>/g, '')
+                    .replace(/<\|end_of_text\|>/g, '')
+                    .replace(/<\|im_end\|>/g, '')
+                    .replace(/<\|endoftext\|>/g, '')
+                    .replace(/<\|start_header_id\|>.*?<\|end_header_id\|>/gs, '')
+                    .trimEnd();
+                  respDiv.textContent = cleaned;
+                  messagesEl.scrollTop = messagesEl.scrollHeight;
+                }
+              } catch (_) {}
+            }
           }
+
+          answer = answer
+            .replace(/<\|eot_id\|>/g, '')
+            .replace(/<\|end_of_text\|>/g, '')
+            .replace(/<\|im_end\|>/g, '')
+            .replace(/<\|endoftext\|>/g, '')
+            .replace(/<\|start_header_id\|>.*?<\|end_header_id\|>/gs, '')
+            .trim();
         }
 
-        const cleanedAnswer = answer
-          .replace(/<\|eot_id\|>/g, '')
-          .replace(/<\|end_of_text\|>/g, '')
-          .replace(/<\|im_end\|>/g, '')
-          .replace(/<\|endoftext\|>/g, '')
-          .replace(/<\|start_header_id\|>.*?<\|end_header_id\|>/gs, '')
-          .trim();
-        conversation.push({ role: 'assistant', content: cleanedAnswer });
+        conversation.push({ role: 'assistant', content: answer });
         snapshotConversation();
       } catch (e) {
         respDiv.classList.add('error');
