@@ -77,28 +77,7 @@
       <div class="card-title">Hangman</div>
       <div class="card-desc">Six wrong guesses, you swing. Apocalypse-themed words.</div>
     </a>
-    <a class="card" id="trivia-card" href="/games/trivia.html">
-      <div class="card-icon">?</div>
-      <div class="card-title">Trivia</div>
-      <div class="card-desc">10 questions generated live from your offline Wikipedia.</div>
-    </a>
   </div>
 </div>
-
-<script>
-// Grey out trivia if no Wikipedia ZIM is installed
-fetch('/api/status').then(r => r.json()).then(d => {
-  const ids = d.installed_ids || [];
-  const hasWiki = ids.some(id => id.startsWith('wikipedia') || id === 'wikipedia_full');
-  const hasLLM = d.llm_available === true;
-  if (!hasWiki || !hasLLM) {
-    const card = document.getElementById('trivia-card');
-    card.style.opacity = '0.4';
-    card.style.pointerEvents = 'none';
-    if (!hasWiki) card.querySelector('.card-desc').textContent = 'Requires Wikipedia. Not installed.';
-    else card.querySelector('.card-desc').textContent = 'Requires LLM. None detected.';
-  }
-}).catch(() => {});
-</script>
 </body>
 </html>
