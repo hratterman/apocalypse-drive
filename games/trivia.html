@@ -144,12 +144,18 @@ async function init() {
     const res = await fetch(SHIM + '/api/status');
     const data = await res.json();
     const ids = data.installed_ids || [];
-    // Check for any wikipedia ZIM
     const hasWiki = ids.some(id => id.startsWith('wikipedia') || id === 'wikipedia_full');
+    const hasLLM = data.model && data.model !== 'none';
     if (!hasWiki) {
       document.getElementById('start-btn').disabled = true;
       document.querySelector('#start-screen p').textContent =
         'Wikipedia is not installed. Download it from the setup page to enable trivia.';
+      return;
+    }
+    if (!hasLLM) {
+      document.getElementById('start-btn').disabled = true;
+      document.querySelector('#start-screen p').textContent =
+        'No LLM detected. Trivia uses the LLM to generate questions. Connect a llamafile or enable Groq to play.';
       return;
     }
     // Find the actual ZIM key

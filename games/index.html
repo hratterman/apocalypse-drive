@@ -90,11 +90,13 @@
 fetch('/api/status').then(r => r.json()).then(d => {
   const ids = d.installed_ids || [];
   const hasWiki = ids.some(id => id.startsWith('wikipedia') || id === 'wikipedia_full');
-  if (!hasWiki) {
+  const hasLLM = d.model && d.model !== 'none';
+  if (!hasWiki || !hasLLM) {
     const card = document.getElementById('trivia-card');
     card.style.opacity = '0.4';
     card.style.pointerEvents = 'none';
-    card.querySelector('.card-desc').textContent = 'Requires Wikipedia. Not installed.';
+    if (!hasWiki) card.querySelector('.card-desc').textContent = 'Requires Wikipedia. Not installed.';
+    else card.querySelector('.card-desc').textContent = 'Requires LLM. None detected.';
   }
 }).catch(() => {});
 </script>
