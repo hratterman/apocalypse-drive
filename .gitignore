@@ -39,3 +39,4 @@ assets/iconset.iconset/
 # Python pycache
 __pycache__/
 *.pyc
+bin/start-shim.sh

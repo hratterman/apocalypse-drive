@@ -503,6 +503,11 @@
   }
 
   body:not([data-theme="terminal"]) .banner { display: none; }
+  /* On narrow screens the ASCII art overflows -- hide it and show the clean title instead */
+  @media (max-width: 600px) {
+    .banner { display: none !important; }
+    .title-block { display: block !important; }
+  }
 
   /* Title shown on non-terminal themes (replaces ASCII banner) */
   .title-block {
@@ -812,7 +817,7 @@
 </head>
 <body>
 <header>
-  <h1>Apocalypse Offline Knowledge System</h1>
+  <h1>Apocalypse</h1>
   <div class="theme-switcher" id="themeSwitcher">
     <span class="label">theme</span>
     <button data-set="terminal" title="Terminal (amber phosphor)"></button>
@@ -823,6 +828,12 @@
   </div>
   <div class="status" id="status"><span class="dot"></span><span id="statusText">checking…</span></div>
 </header>
+
+<div id="demo-banner" style="background:rgba(255,165,0,0.12);border-bottom:1px solid rgba(255,165,0,0.3);padding:8px 20px;font-size:12px;color:var(--text-dim,#aaa);text-align:center;letter-spacing:0.03em;">
+  This is a live demo running on a single machine. For real offline use, download the app and run it from your own drive.
+  <a href="https://github.com/hratterman/apocalypse-drive/releases/latest" target="_blank" rel="noopener" style="color:var(--text-bright,#fff);margin-left:8px;text-decoration:underline;">Get it on GitHub</a>
+  <span style="margin-left:12px;opacity:0.5;cursor:pointer;" onclick="document.getElementById('demo-banner').remove()">dismiss</span>
+</div>
 
 <main>
   <pre class="banner">    █████╗ ██████╗  ██████╗  ██████╗ █████╗ ██╗  ██╗   ██╗██████╗ ███████╗███████╗
@@ -990,10 +1001,17 @@ async function autoDetectPorts() {
   // the shim routes / to this page, so the same origin already IS the shim.
   // Skip the candidate probe entirely so we don't get fooled into picking a
   // wrong port that happens to be running something else.
-  const servedByShim = !urlParams.get('kiwix') && (window.location.protocol === 'http:' || window.location.protocol === 'https:') && window.location.port;
+  // servedByShim: page is being served by the shim itself (either local .app on
+  // a custom port, or remotely via Cloudflare Tunnel on standard HTTPS port 443).
+  // When port is empty (443/80), window.location.port is "" which is falsy --
+  // so we check for that case explicitly. Use origin-relative URLs so that
+  // remote viewers (phone, laptop) hit the same server that served this page,
+  // not their own localhost.
+  const isStandardPort = window.location.port === '' && (window.location.protocol === 'https:' || window.location.protocol === 'http:');
+  const servedByShim = !urlParams.get('kiwix') && (window.location.protocol === 'http:' || window.location.protocol === 'https:') && (window.location.port || isStandardPort);
   if (servedByShim) {
-    KIWIX_PORT = window.location.port;
-    KIWIX = `${window.location.protocol}//${window.location.hostname}:${KIWIX_PORT}`;
+    KIWIX_PORT = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+    KIWIX = window.location.origin;  // use origin so relative paths work remotely
   }
 
   const kiwixCandidates = KIWIX_PORT ? [KIWIX_PORT] : ['8890', '8891', '8892', '8893', '18888', '8888'];
@@ -1112,7 +1130,8 @@ async function checkServices() {
     parts.push(`<span class="label">KIWIX:</span> <span class="value">${kiwixOk ? `online · ${kiwixData?.zims || '?'} archives loaded` : 'offline'}</span>`);
     parts.push(`<span class="label">LLM:</span> <span class="value">${llamaOk ? `online · ${llamaData?.model || 'ready'}` : 'offline'}</span>`);
     parts.push(`<span class="label">MODE:</span> <span class="value">${LLM_ONLY ? 'llm-only' : 'rag (retrieval-augmented)'}</span>`);
-    parts.push(`<span class="label">NET:</span> <span class="value">localhost only · no internet</span>`);
+    const isRemote = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+    parts.push(`<span class="label">NET:</span> <span class="value">${isRemote ? 'remote demo · no live internet in ZIM search' : 'localhost only · no internet'}</span>`);
     sysInfo.innerHTML = parts.join('  ·  ');
   }
 

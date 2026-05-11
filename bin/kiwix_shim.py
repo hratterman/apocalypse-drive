@@ -1209,6 +1209,29 @@ class Handler(BaseHTTPRequestHandler):
         content = bytes(item.content)
         mime = item.mimetype or guess_mime(item.path)
 
+        # Inject a search bar into HTML content pages so users can navigate
+        # without going back to the main UI.
+        if mime.startswith('text/html'):
+            search_bar = f'''<div id="apoc-search-bar" style="position:fixed;top:0;left:0;right:0;z-index:99999;background:#1a1a1a;padding:6px 12px;display:flex;align-items:center;gap:8px;font-family:monospace;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.5);">
+<a href="/" style="color:#f97316;text-decoration:none;font-weight:bold;white-space:nowrap;">&#8592; APOCALYPSE</a>
+<span style="color:#555;">|</span>
+<input id="apoc-q" type="text" placeholder="Search all books..." style="flex:1;background:#2a2a2a;border:1px solid #444;color:#eee;padding:4px 8px;border-radius:3px;font-family:monospace;font-size:13px;outline:none;" onkeydown="if(event.key==='Enter'){{var q=this.value.trim();if(q)window.location='/search?pattern='+encodeURIComponent(q)+'&books={book}';}}" />
+<button onclick="var q=document.getElementById('apoc-q').value.trim();if(q)window.location='/search?pattern='+encodeURIComponent(q)+'&books={book}';" style="background:#f97316;border:none;color:#000;padding:4px 10px;border-radius:3px;cursor:pointer;font-family:monospace;font-size:13px;font-weight:bold;">GO</button>
+<a href="/content/{book}/" style="color:#888;text-decoration:none;white-space:nowrap;font-size:12px;">&#8962; home</a>
+</div>
+<div style="height:36px;"></div>'''
+            try:
+                html = content.decode('utf-8', errors='replace')
+                if '</body>' in html:
+                    html = html.replace('</body>', search_bar + '</body>', 1)
+                elif '</html>' in html:
+                    html = html.replace('</html>', search_bar + '</html>', 1)
+                else:
+                    html = html + search_bar
+                content = html.encode('utf-8')
+            except Exception:
+                pass  # if anything goes wrong, serve original content unchanged
+
         self.send_response(200)
         self._cors()
         self.send_header('Content-Type', mime)
