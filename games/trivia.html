@@ -211,17 +211,23 @@ async function startGame() {
   }
 }
 
+function fetchWithTimeout(url, opts, ms) {
+  const ctrl = new AbortController();
+  const id = setTimeout(() => ctrl.abort(), ms);
+  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(id));
+}
+
 async function fetchArticleText(topic) {
   // Search for the topic
   const book = wikiBook ? '&books=' + wikiBook : '';
-  const res = await fetch(SHIM + '/search?pattern=' + encodeURIComponent(topic) + book + '&pageLength=5');
+  const res = await fetchWithTimeout(SHIM + '/search?pattern=' + encodeURIComponent(topic) + book + '&pageLength=5', {}, 8000);
   const html = await res.text();
   // Parse out result links
   const links = [...html.matchAll(/href="(\/content\/wikipedia_[^"]+)"/g)].map(m => m[1]);
   if (!links.length) return null;
   // Pick a random one
   const link = links[Math.floor(Math.random() * Math.min(links.length, 3))];
-  const articleRes = await fetch(SHIM + link);
+  const articleRes = await fetchWithTimeout(SHIM + link, {}, 10000);
   const articleHtml = await articleRes.text();
   // Strip tags, collapse whitespace, take first ~1200 chars
   const text = articleHtml
@@ -257,11 +263,11 @@ where "answer" is the 0-indexed position of the correct choice.
 Text about "${article.title}":
 ${article.text}`;
 
-  const res = await fetch(SHIM + '/api/chat', {
+  const res = await fetchWithTimeout(SHIM + '/api/chat', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], max_tokens: 800 })
-  });
+  }, 25000);
   const data = await res.json();
   const raw = data.choices?.[0]?.message?.content || '';
   // Extract JSON array from response
@@ -272,8 +278,8 @@ ${article.text}`;
 }
 
 async function buildQuestions() {
-  // Pick 5 random topics, fetch articles, generate 2 questions each = 10 total
-  const shuffled = [...TOPICS].sort(() => Math.random() - 0.5).slice(0, 6);
+  // Try up to 12 topics to get 10 questions (2 per article), so timeouts have slack
+  const shuffled = [...TOPICS].sort(() => Math.random() - 0.5).slice(0, 12);
   for (const topic of shuffled) {
     if (questions.length >= TOTAL) break;
     try {
@@ -285,8 +291,10 @@ async function buildQuestions() {
       for (const q of qs) {
         if (questions.length < TOTAL) questions.push(q);
       }
+      // Start with whatever we have if we already have enough for a short game
+      if (questions.length >= 4) updateStatus();
     } catch(e) {
-      // Skip failed articles, try next topic
+      // Skip failed articles (timeout, bad response, etc.), try next topic
       continue;
     }
   }
