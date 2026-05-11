@@ -737,6 +737,16 @@ def _remote_block():
     return 403, [('Content-Type', 'application/json')], body
 
 
+def _effective_ip(client_ip, headers):
+    """Use CF-Connecting-IP when available so rate limiting works per real client,
+    not per Cloudflare edge node (which would bucket all visitors together)."""
+    if headers:
+        cf = headers.get('Cf-Connecting-Ip') or headers.get('cf-connecting-ip')
+        if cf:
+            return cf.strip()
+    return client_ip or ''
+
+
 def dispatch_get(path, qs, client_ip=None, headers=None):
     """Returns (status, headers, body_bytes) or None if not handled."""
     if not is_initialized():
@@ -747,7 +757,7 @@ def dispatch_get(path, qs, client_ip=None, headers=None):
         return _remote_block()
 
     # Rate-limit LLM endpoints (Groq proxy abuse prevention)
-    if path in _LLM_PATHS and _rate_limited(client_ip or ''):
+    if path in _LLM_PATHS and _rate_limited(_effective_ip(client_ip, headers)):
         body = b'{"error":"rate limit exceeded, try again in a moment"}'
         return 429, [('Content-Type', 'application/json')], body
 
@@ -947,7 +957,7 @@ def dispatch_post(path, body, client_ip=None, headers=None):
         return _remote_block()
 
     # Rate-limit LLM endpoints (Groq proxy abuse prevention)
-    if path in _LLM_PATHS and _rate_limited(client_ip or ''):
+    if path in _LLM_PATHS and _rate_limited(_effective_ip(client_ip, headers)):
         body_out = b'{"error":"rate limit exceeded, try again in a moment"}'
         return 429, [('Content-Type', 'application/json')], body_out
 
