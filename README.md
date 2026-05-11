@@ -306,6 +306,21 @@ The Library page also has a **Browse All Kiwix** section that searches the entir
 
 ---
 
+## Minimum hardware
+
+The web UI, Kiwix search, and games run on almost anything. The LLM is what determines your floor.
+
+| Mode | Power draw | Hardware | Notes |
+|---|---|---|---|
+| Search + browse only | ~5W | Raspberry Pi 5, any cheap mini PC | No LLM. Wikipedia search, article browsing, maps, games. A 100Wh battery bank runs this 12+ hours. |
+| Small LLM (1-3B) | 8-15W | Raspberry Pi 5, Intel N100 mini PC | Llama 3.2 1B or 3B at ~1-3 tokens/sec. Slow but functional for real questions. |
+| Decent LLM (7-8B) | 25-60W | Intel N100 or better | Fast enough to be comfortable. Practical floor for an AI-enabled survival drive. |
+| Fast LLM (8B+, GPU) | 80-150W+ | MacBook, desktop GPU | Not realistic in a low-power scenario. |
+
+For real sparse-power situations: a Pi 5 with a 7-8B GGUF model at Q4 quantization is around 8-15W under load and still gives you useful AI answers. Below that, drop to search-only mode, which is still genuinely useful, and costs nothing extra in power.
+
+---
+
 ## Limitations
 
 - Search inside ZIMs (full-text search) works on most ZIMs but not all. Title-based and LLM-based lookups always work.
@@ -338,5 +353,5 @@ The bundled ZIMs and the LLM each have their own licenses (mostly CC-BY-SA for Z
 
 <p align="center">
   Built by <a href="https://henryratterman.com">Henry Ratterman</a> in Bloomington, Indiana<br/>
-  <sub>Marketing major. Builds things anyway.</sub>
+  <sub>Marketing major. Builds things anyway. Also runs <a href="https://arduous.io">Arduous</a>, an AI fluency assessment for hiring.</sub>
 </p>
