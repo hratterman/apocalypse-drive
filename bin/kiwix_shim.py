@@ -227,14 +227,18 @@ Examples:
 
 
 def llm_complete(system, user, max_tokens=300, temperature=0.2, timeout=60):
-    """Call the local LLM chat endpoint, return the assistant text.
+    """Call the LLM chat endpoint, return the assistant text.
 
-    Requires a local llamafile or llama-server running on a candidate port.
-    Auto-detects port if LLAMAFILE_URL env var is not set.
+    Priority:
+      1. Local llamafile/llama-server if one is detected on a candidate port.
+      2. Groq cloud API if GROQ_API_KEY is set (demo/hosted mode only).
+
+    Set GROQ_API_KEY in the server environment to enable Groq fallback.
+    On a real offline drive this env var is never set, so only option 1 applies.
     """
     import urllib.request as _ur
 
-    def _call(url, model, body_extra=None):
+    def _call(url, model, api_key=None, body_extra=None):
         body = {
             'model': model,
             'messages': [
@@ -247,6 +251,8 @@ def llm_complete(system, user, max_tokens=300, temperature=0.2, timeout=60):
         if body_extra:
             body.update(body_extra)
         headers = {'Content-Type': 'application/json', 'User-Agent': 'Apocalypse/1.5.9'}
+        if api_key:
+            headers['Authorization'] = f'Bearer {api_key}'
         req = _ur.Request(
             f'{url}/v1/chat/completions',
             data=json.dumps(body).encode(),
@@ -258,7 +264,7 @@ def llm_complete(system, user, max_tokens=300, temperature=0.2, timeout=60):
         text = text.replace('<|eot_id|>', '').strip()
         return text
 
-    # Try local LLM
+    # 1. Try local LLM first
     url = _detect_llm_url()
     if url:
         try:
@@ -270,7 +276,24 @@ def llm_complete(system, user, max_tokens=300, temperature=0.2, timeout=60):
                 try:
                     return _call(url, 'local')
                 except Exception:
-                    pass
+                    pass  # fall through to cloud
+
+    # 2. Groq fallback (hosted/demo mode -- only active when GROQ_API_KEY is set)
+    groq_key = os.environ.get('GROQ_API_KEY', '').strip()
+    if groq_key:
+        try:
+            return _call(
+                'https://api.groq.com/openai',
+                'llama-3.1-8b-instant',
+                api_key=groq_key,
+            )
+        except Exception:
+            pass
+        return _call(
+            'https://api.groq.com/openai',
+            'llama-3.3-70b-versatile',
+            api_key=groq_key,
+        )
 
     raise ConnectionError('No LLM detected on any candidate port')
 
