@@ -22,6 +22,10 @@
 </p>
 
 <p align="center">
+  <i>Built by <a href="https://henryratterman.com">Henry Ratterman</a>, a marketing major at Indiana University who got tired of assuming the internet would always be there. Also building <a href="https://arduous.io">Arduous</a>.</i>
+</p>
+
+<p align="center">
   <a href="#install-the-easy-way">Install</a> ·
   <a href="#make-a-fully-portable-drive">Portable drive</a> ·
   <a href="#whats-on-the-drive">What's on the drive</a> ·
