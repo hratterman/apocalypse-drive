@@ -882,11 +882,28 @@ def dispatch_get(path, qs, client_ip=None, headers=None):
     if path == '/api/status':
         st = load_state()
         is_local = _is_local(client_ip, headers)
+        # llm_available: true if a local llamafile is reachable OR a Groq key is configured.
+        # Does not require a call to have been made yet -- used by the UI to enable/disable LLM features.
+        import os as _os
+        groq_configured = bool(_os.environ.get('GROQ_API_KEY', '').strip())
+        llamafile_reachable = False
+        try:
+            import urllib.request as _ur
+            for _port in (8080, 8081, 8082, 8083, 8084):
+                try:
+                    _ur.urlopen(f'http://127.0.0.1:{_port}/v1/models', timeout=0.3)
+                    llamafile_reachable = True
+                    break
+                except Exception:
+                    pass
+        except Exception:
+            pass
         resp = {
             'setup_complete': st.get('setup_complete', False),
             'installed_ids': installed_ids(),
             'theme': st.get('theme', 'terminal'),
             'model': st.get('model', '3b'),
+            'llm_available': groq_configured or llamafile_reachable,
             'disk': disk_for(_INSTALL_DIR),
             'version': _APP_VERSION,
             'author': 'Henry Ratterman',

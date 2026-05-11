@@ -90,7 +90,7 @@
 fetch('/api/status').then(r => r.json()).then(d => {
   const ids = d.installed_ids || [];
   const hasWiki = ids.some(id => id.startsWith('wikipedia') || id === 'wikipedia_full');
-  const hasLLM = d.model && d.model !== 'none';
+  const hasLLM = d.llm_available === true;
   if (!hasWiki || !hasLLM) {
     const card = document.getElementById('trivia-card');
     card.style.opacity = '0.4';

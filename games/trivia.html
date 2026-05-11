@@ -145,7 +145,7 @@ async function init() {
     const data = await res.json();
     const ids = data.installed_ids || [];
     const hasWiki = ids.some(id => id.startsWith('wikipedia') || id === 'wikipedia_full');
-    const hasLLM = data.model && data.model !== 'none';
+    const hasLLM = data.llm_available === true;
     if (!hasWiki) {
       document.getElementById('start-btn').disabled = true;
       document.querySelector('#start-screen p').textContent =
