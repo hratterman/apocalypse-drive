@@ -126,7 +126,7 @@ function submit() {
   if (currentCol < COLS) { flash('not enough letters'); return; }
   let guess = '';
   for (let c = 0; c < COLS; c++) guess += document.getElementById(`t-${currentRow}-${c}`).textContent;
-  if (!WORDS.includes(guess)) { flash('not in word list'); return; }
+  if (!/^[a-z]{5}$/.test(guess)) { flash('five letters only'); return; }
   // Score
   const ans = answer.split('');
   const result = Array(COLS).fill('absent');
