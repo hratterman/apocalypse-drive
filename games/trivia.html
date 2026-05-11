@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trivia · Apocalypse</title>
+<link rel="stylesheet" href="/static/themes.css">
+<script src="/static/apply-theme.js"></script>
+<style>
+  .trivia-wrap { max-width: 680px; margin: 0 auto; }
+  #status-bar { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; display: flex; gap: 20px; }
+  #status-bar span { color: var(--text-bright); }
+
+  /* screens */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* start screen */
+  #start-screen { text-align: center; padding: 40px 0; }
+  #start-screen h2 { color: var(--text-bright); font-size: 22px; margin-bottom: 8px; text-transform: var(--button-text-transform); }
+  #start-screen p { color: var(--text-dim); font-size: 13px; margin-bottom: 28px; line-height: 1.6; }
+  .btn-main { background: var(--accent); color: var(--bg); border: none; padding: 12px 32px; font-family: inherit; font-size: 14px; font-weight: bold; text-transform: var(--button-text-transform); letter-spacing: var(--button-letter-spacing); cursor: pointer; border-radius: var(--border-radius); }
+  .btn-main:hover { opacity: 0.85; }
+  .btn-main:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* loading screen */
+  #loading-screen { text-align: center; padding: 60px 0; }
+  #loading-screen p { color: var(--text-dim); font-size: 13px; margin-top: 12px; }
+  .spinner { display: inline-block; width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* question screen */
+  #q-meta { font-size: 11px; color: var(--text-dim); margin-bottom: 6px; letter-spacing: 0.05em; }
+  #q-source { font-size: 11px; color: var(--text-dim); margin-bottom: 16px; }
+  #q-source a { color: var(--text-dim); text-decoration: underline; }
+  #q-text { font-size: 17px; color: var(--text-bright); line-height: 1.5; margin-bottom: 24px; font-weight: bold; }
+  .choices { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
+  .choice { background: var(--panel); border: 1px solid var(--border); padding: 12px 16px; font-family: inherit; font-size: 14px; color: var(--text); text-align: left; cursor: pointer; border-radius: var(--border-radius); transition: background 0.1s, border-color 0.1s; }
+  .choice:hover:not(:disabled) { background: var(--bg-glow); border-color: var(--text-dim); color: var(--text-bright); }
+  .choice.correct { background: rgba(74,222,128,0.15); border-color: #4ade80; color: #4ade80; }
+  .choice.wrong { background: rgba(239,68,68,0.15); border-color: #ef4444; color: #ef4444; }
+  .choice:disabled { cursor: default; }
+  #next-btn { display: none; background: var(--panel); border: 1px solid var(--border); color: var(--text-bright); padding: 10px 24px; font-family: inherit; font-size: 13px; text-transform: var(--button-text-transform); letter-spacing: var(--button-letter-spacing); cursor: pointer; border-radius: var(--border-radius); }
+  #next-btn:hover { background: var(--bg-glow); }
+  #progress-bar-wrap { background: var(--panel); border-radius: 4px; height: 4px; margin-bottom: 20px; overflow: hidden; }
+  #progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
+
+  /* results screen */
+  #results-screen { text-align: center; padding: 40px 0; }
+  #score-display { font-size: 52px; font-weight: bold; color: var(--accent); margin-bottom: 8px; }
+  #score-label { color: var(--text-dim); font-size: 14px; margin-bottom: 28px; }
+  #result-breakdown { text-align: left; margin: 0 auto 28px; max-width: 500px; display: flex; flex-direction: column; gap: 8px; }
+  .result-item { font-size: 12px; color: var(--text-dim); padding: 8px 12px; background: var(--panel); border-radius: var(--border-radius); border-left: 3px solid var(--border); line-height: 1.5; }
+  .result-item.got-right { border-left-color: #4ade80; }
+  .result-item.got-wrong { border-left-color: #ef4444; }
+  .result-item strong { color: var(--text-bright); display: block; margin-bottom: 2px; }
+
+  /* error */
+  #error-screen { text-align: center; padding: 60px 0; }
+  #error-screen p { color: var(--text-dim); font-size: 13px; margin-bottom: 20px; }
+
+  [data-theme="geocities"] .choice { border: 2px solid #000080 !important; background: #c0c0c0 !important; color: #000080 !important; }
+  [data-theme="geocities"] .choice.correct { background: #00ff00 !important; color: #000000 !important; }
+  [data-theme="geocities"] .choice.wrong { background: #ff0000 !important; color: #ffffff !important; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <div class="frame-header">
+    <h1>Trivia</h1>
+    <a class="frame-back" href="/games/">← games</a>
+  </div>
+
+  <div class="trivia-wrap">
+    <div id="status-bar">
+      <div>question <span id="q-num">-</span> of <span id="q-total">10</span></div>
+      <div>score <span id="score">0</span></div>
+    </div>
+
+    <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+
+    <!-- start -->
+    <div id="start-screen" class="screen active">
+      <h2>Wikipedia Trivia</h2>
+      <p>10 questions pulled from your offline Wikipedia.<br>Each question is generated fresh from a real article.</p>
+      <button class="btn-main" id="start-btn" onclick="startGame()">START</button>
+    </div>
+
+    <!-- loading -->
+    <div id="loading-screen" class="screen">
+      <div class="spinner"></div>
+      <p id="loading-msg">Picking an article...</p>
+    </div>
+
+    <!-- question -->
+    <div id="question-screen" class="screen">
+      <div id="q-meta"></div>
+      <div id="q-source"></div>
+      <div id="q-text"></div>
+      <div class="choices" id="choices"></div>
+      <button id="next-btn" onclick="nextQuestion()">NEXT</button>
+    </div>
+
+    <!-- results -->
+    <div id="results-screen" class="screen">
+      <div id="score-display"></div>
+      <div id="score-label"></div>
+      <div id="result-breakdown"></div>
+      <button class="btn-main" onclick="startGame()">PLAY AGAIN</button>
+    </div>
+
+    <!-- error -->
+    <div id="error-screen" class="screen">
+      <p id="error-msg">Something went wrong generating questions.</p>
+      <button class="btn-main" onclick="showScreen('start-screen')">BACK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SHIM = window.location.origin;
+const TOTAL = 10;
+
+// Seeded random pool of search terms -- varied enough to hit different articles
+const TOPICS = [
+  'photosynthesis','black hole','Roman Empire','DNA','earthquake','Renaissance',
+  'Amazon river','periodic table','French Revolution','solar system',
+  'World War II','quantum mechanics','immune system','Ancient Egypt','plate tectonics',
+  'Industrial Revolution','mitosis','ocean current','Byzantine Empire','vaccination',
+  'relativity','nitrogen cycle','Cold War','evolution','coral reef',
+  'printing press','blood type','hurricane','Ottoman Empire','nuclear fission',
+  'Silk Road','photon','volcanic eruption','magna carta','atmospheric pressure',
+  'Mongol Empire','continental drift','Greek mythology','antibiotic','tidal force',
+  'irrigation','Ming dynasty','supernova','cell membrane','trade winds',
+  'Arctic ice','Enlightenment','neuron','irrigation','morse code'
+];
+
+let questions = [];
+let currentQ = 0;
+let score = 0;
+let wikiBook = null;
+
+async function init() {
+  try {
+    const res = await fetch(SHIM + '/api/status');
+    const data = await res.json();
+    const ids = data.installed_ids || [];
+    // Check for any wikipedia ZIM
+    const hasWiki = ids.some(id => id.startsWith('wikipedia') || id === 'wikipedia_full');
+    if (!hasWiki) {
+      document.getElementById('start-btn').disabled = true;
+      document.querySelector('#start-screen p').textContent =
+        'Wikipedia is not installed. Download it from the setup page to enable trivia.';
+      return;
+    }
+    // Find the actual ZIM key
+    const resp2 = await fetch(SHIM + '/search?pattern=history&pageLength=1');
+    const html = await resp2.text();
+    const m = html.match(/href="\/content\/(wikipedia_[^/]+)\//);
+    wikiBook = m ? m[1] : null;
+  } catch(e) {
+    // If status check fails, let them try anyway
+  }
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function setLoading(msg) {
+  document.getElementById('loading-msg').textContent = msg;
+  showScreen('loading-screen');
+}
+
+async function startGame() {
+  questions = [];
+  currentQ = 0;
+  score = 0;
+  updateStatus();
+  setLoading('Picking articles...');
+  try {
+    await buildQuestions();
+    showQuestion();
+  } catch(e) {
+    document.getElementById('error-msg').textContent = 'Failed to generate questions. Is the LLM available? (' + e.message + ')';
+    showScreen('error-screen');
+  }
+}
+
+async function fetchArticleText(topic) {
+  // Search for the topic
+  const book = wikiBook ? '&books=' + wikiBook : '';
+  const res = await fetch(SHIM + '/search?pattern=' + encodeURIComponent(topic) + book + '&pageLength=5');
+  const html = await res.text();
+  // Parse out result links
+  const links = [...html.matchAll(/href="(\/content\/wikipedia_[^"]+)"/g)].map(m => m[1]);
+  if (!links.length) return null;
+  // Pick a random one
+  const link = links[Math.floor(Math.random() * Math.min(links.length, 3))];
+  const articleRes = await fetch(SHIM + link);
+  const articleHtml = await articleRes.text();
+  // Strip tags, collapse whitespace, take first ~1200 chars
+  const text = articleHtml
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\[[\d, ]+\]/g, '')  // strip citation numbers
+    .trim()
+    .slice(0, 1200);
+  const title = link.split('/').pop().replace(/_/g, ' ');
+  return { text, title, url: link };
+}
+
+async function generateQuestionsFromArticle(article) {
+  const prompt = `You are a trivia question generator. Based ONLY on the text below, write exactly 2 multiple choice trivia questions.
+
+Rules:
+- Each question must be answerable from the text alone.
+- 4 answer choices per question (A, B, C, D). Exactly one is correct.
+- Wrong answers should be plausible but clearly wrong to someone who read the text.
+- Keep questions factual and specific, not vague.
+- Format your response as valid JSON only, no extra text:
+[
+  {
+    "q": "question text",
+    "choices": ["choice A", "choice B", "choice C", "choice D"],
+    "answer": 0
+  }
+]
+where "answer" is the 0-indexed position of the correct choice.
+
+Text about "${article.title}":
+${article.text}`;
+
+  const res = await fetch(SHIM + '/api/chat', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], max_tokens: 800 })
+  });
+  const data = await res.json();
+  const raw = data.choices?.[0]?.message?.content || '';
+  // Extract JSON array from response
+  const match = raw.match(/\[[\s\S]*\]/);
+  if (!match) throw new Error('Bad LLM response');
+  const qs = JSON.parse(match[0]);
+  return qs.map(q => ({ ...q, source: article.title, url: article.url }));
+}
+
+async function buildQuestions() {
+  // Pick 5 random topics, fetch articles, generate 2 questions each = 10 total
+  const shuffled = [...TOPICS].sort(() => Math.random() - 0.5).slice(0, 6);
+  for (const topic of shuffled) {
+    if (questions.length >= TOTAL) break;
+    try {
+      setLoading('Reading about "' + topic + '"...');
+      const article = await fetchArticleText(topic);
+      if (!article || article.text.length < 200) continue;
+      setLoading('Generating questions from "' + article.title + '"...');
+      const qs = await generateQuestionsFromArticle(article);
+      for (const q of qs) {
+        if (questions.length < TOTAL) questions.push(q);
+      }
+    } catch(e) {
+      // Skip failed articles, try next topic
+      continue;
+    }
+  }
+  if (questions.length < 3) throw new Error('Not enough questions generated');
+  questions = questions.slice(0, TOTAL);
+}
+
+function updateStatus() {
+  document.getElementById('q-num').textContent = Math.min(currentQ + 1, TOTAL);
+  document.getElementById('q-total').textContent = questions.length || TOTAL;
+  document.getElementById('score').textContent = score;
+  const pct = questions.length ? (currentQ / questions.length) * 100 : 0;
+  document.getElementById('progress-bar').style.width = pct + '%';
+}
+
+function showQuestion() {
+  const q = questions[currentQ];
+  document.getElementById('q-meta').textContent =
+    'QUESTION ' + (currentQ + 1) + ' OF ' + questions.length;
+  document.getElementById('q-source').innerHTML =
+    'Source: <a href="' + q.url + '" target="_blank">' + q.source + '</a> (Wikipedia)';
+  document.getElementById('q-text').textContent = q.q;
+
+  const choicesEl = document.getElementById('choices');
+  choicesEl.innerHTML = '';
+  q.choices.forEach((c, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'choice';
+    btn.textContent = ['A', 'B', 'C', 'D'][i] + '.  ' + c;
+    btn.onclick = () => selectAnswer(i, q.answer);
+    choicesEl.appendChild(btn);
+  });
+
+  document.getElementById('next-btn').style.display = 'none';
+  updateStatus();
+  showScreen('question-screen');
+}
+
+function selectAnswer(chosen, correct) {
+  const btns = document.querySelectorAll('.choice');
+  btns.forEach(b => b.disabled = true);
+  btns[chosen].classList.add(chosen === correct ? 'correct' : 'wrong');
+  if (chosen !== correct) btns[correct].classList.add('correct');
+  if (chosen === correct) score++;
+  updateStatus();
+  document.getElementById('next-btn').style.display = 'inline-block';
+  document.getElementById('next-btn').textContent =
+    currentQ + 1 >= questions.length ? 'SEE RESULTS' : 'NEXT';
+}
+
+function nextQuestion() {
+  currentQ++;
+  if (currentQ >= questions.length) {
+    showResults();
+  } else {
+    showQuestion();
+  }
+}
+
+function showResults() {
+  document.getElementById('progress-bar').style.width = '100%';
+  document.getElementById('score-display').textContent = score + '/' + questions.length;
+  const pct = Math.round((score / questions.length) * 100);
+  const labels = ['Better luck next time.', 'Not bad.', 'Solid.', 'Nice work.', 'Impressive.'];
+  const idx = Math.floor(pct / 25);
+  document.getElementById('score-label').textContent = pct + '% correct. ' + (labels[idx] || labels[4]);
+
+  const bd = document.getElementById('result-breakdown');
+  bd.innerHTML = '';
+  questions.forEach((q, i) => {
+    // We don't track chosen answer per question here, so just show source + topic
+    const div = document.createElement('div');
+    div.className = 'result-item';
+    div.innerHTML = '<strong>' + q.q.slice(0, 80) + (q.q.length > 80 ? '...' : '') + '</strong>' +
+      'From: ' + q.source;
+    bd.appendChild(div);
+  });
+
+  showScreen('results-screen');
+}
+
+init();
+</script>
+</body>
+</html>
