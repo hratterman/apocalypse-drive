@@ -89,6 +89,8 @@
     <div id="loading-screen" class="screen">
       <div class="spinner"></div>
       <p id="loading-msg">Picking an article...</p>
+      <p id="loading-detail" style="font-size:11px;color:var(--text-dim);margin-top:6px;"></p>
+      <p id="loading-timer" style="font-size:11px;color:var(--text-dim);margin-top:4px;"></p>
     </div>
 
     <!-- question -->
@@ -134,11 +136,6 @@ const TOPICS = [
   'Arctic ice','Enlightenment','neuron','irrigation','morse code'
 ];
 
-let questions = [];
-let currentQ = 0;
-let score = 0;
-let wikiBook = null;
-
 async function init() {
   try {
     const res = await fetch(SHIM + '/api/status');
@@ -168,14 +165,34 @@ async function init() {
   }
 }
 
+let questions = [];
+let currentQ = 0;
+let score = 0;
+let wikiBook = null;
+let loadingTimer = null;
+let loadingStart = 0;
+
+function setLoading(msg, detail) {
+  document.getElementById('loading-msg').textContent = msg;
+  document.getElementById('loading-detail').textContent = detail || '';
+  showScreen('loading-screen');
+  if (!loadingTimer) {
+    loadingStart = Date.now();
+    loadingTimer = setInterval(() => {
+      const secs = Math.floor((Date.now() - loadingStart) / 1000);
+      document.getElementById('loading-timer').textContent = secs + 's elapsed — this takes about 30-40s';
+    }, 1000);
+  }
+}
+
+function clearLoadingTimer() {
+  if (loadingTimer) { clearInterval(loadingTimer); loadingTimer = null; }
+  document.getElementById('loading-timer').textContent = '';
+}
+
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-}
-
-function setLoading(msg) {
-  document.getElementById('loading-msg').textContent = msg;
-  showScreen('loading-screen');
 }
 
 async function startGame() {
@@ -186,6 +203,7 @@ async function startGame() {
   setLoading('Picking articles...');
   try {
     await buildQuestions();
+    clearLoadingTimer();
     showQuestion();
   } catch(e) {
     document.getElementById('error-msg').textContent = 'Failed to generate questions. Is the LLM available? (' + e.message + ')';
@@ -259,10 +277,10 @@ async function buildQuestions() {
   for (const topic of shuffled) {
     if (questions.length >= TOTAL) break;
     try {
-      setLoading('Reading about "' + topic + '"...');
+      setLoading(`Building questions (${questions.length}/${TOTAL})...`, '"' + topic + '"');
       const article = await fetchArticleText(topic);
       if (!article || article.text.length < 200) continue;
-      setLoading('Generating questions from "' + article.title + '"...');
+      setLoading(`Building questions (${questions.length}/${TOTAL})...`, 'generating from "' + article.title + '"');
       const qs = await generateQuestionsFromArticle(article);
       for (const q of qs) {
         if (questions.length < TOTAL) questions.push(q);
